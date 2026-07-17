@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Chorva Bozor</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #2B1D14;
+    --brown: #8B5A2B;
+    --brown-dark: #6B4420;
+    --gold: #D9A441;
+    --gold-dark: #B8842A;
+    --paper: #FBF7F0;
+    --card: #FFFFFF;
+    --line: #EAE0D0;
+    --muted: #8A7A6A;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Manrope', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  .chips { display: flex; gap: 8px; padding: 12px 14px 4px; overflow-x: auto; }
+  .chip {
+    flex-shrink: 0; padding: 8px 16px; border-radius: 20px;
+    font-size: 13px; font-weight: 600; white-space: nowrap;
+    border: 1.5px solid var(--line); color: var(--ink); background: var(--card);
+    cursor: pointer;
+  }
+  .chip.active { background: var(--brown); border-color: var(--brown); color: white; }
+
+  .location-banner {
+    margin: 10px 14px 0;
+    background: #F0E4D0; border: 1.5px solid var(--gold); border-radius: 12px;
+    padding: 10px 12px; font-size: 12.5px; font-weight: 700; color: var(--brown-dark);
+    display: flex; align-items: center; gap: 8px; cursor: pointer;
+  }
+
+  .catalog-header { padding: 14px 16px 4px; }
+  .catalog-header h2 { font-size: 20px; font-weight: 800; }
+  .catalog-header .count { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 14px 40px; }
+  .card { background: var(--card); border-radius: 16px; overflow: hidden; border: 1px solid var(--line); }
+  .thumb { width: 100%; height: 120px; object-fit: cover; background: #EDE4D0; display: block; }
+  .card-body { padding: 9px 10px 10px; display: flex; flex-direction: column; gap: 3px; }
+  .card-body .name { font-size: 13px; font-weight: 700; line-height: 1.3; }
+  .card-body .meta-row { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+  .region-tag { font-size: 10px; font-weight: 600; color: var(--brown-dark); background: #F0E4D0; padding: 3px 7px; border-radius: 8px; }
+  .price { font-size: 13px; font-weight: 800; }
+  .btn-row { display: flex; gap: 6px; margin-top: 8px; }
+  .call-btn {
+    flex: 1;
+    background: var(--brown); color: white; border: none;
+    border-radius: 10px; padding: 8px 0; font-size: 12px; font-weight: 700;
+    text-align: center; text-decoration: none; display: block;
+  }
+  .nav-btn {
+    flex: 1;
+    background: var(--gold); color: var(--ink); border: none;
+    border-radius: 10px; padding: 8px 0; font-size: 12px; font-weight: 700;
+    text-align: center; text-decoration: none; display: block;
+  }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+  .loading { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 13.5px; }
+</style>
+</head>
+<body>
+
+  <div class="chips" id="chips">
+    <div class="chip active" data-cat="all">Barchasi</div>
+    <div class="chip" data-cat="🐄 Mol">🐄 Mol</div>
+    <div class="chip" data-cat="🐑 Qo'y">🐑 Qo'y</div>
+    <div class="chip" data-cat="🐐 Echki">🐐 Echki</div>
+  </div>
+
+  <div class="location-banner" id="locationBanner">📍 Joylashuvni yoqib, yaqin e'lonlarni ko'ring</div>
+
+  <div class="catalog-header">
+    <h2>Mahsulotlar</h2>
+    <div class="count" id="countLabel">Yuklanmoqda...</div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+<script>
+  const tg = window.Telegram ? window.Telegram.WebApp : null;
+  if (tg) { tg.ready(); tg.expand(); }
+
+  let currentCategory = 'all';
+  let userLat = null;
+  let userLon = null;
+
+  function requestLocation() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        userLat = pos.coords.latitude;
+        userLon = pos.coords.longitude;
+        document.getElementById('locationBanner').textContent = '📍 Joylashuvingiz aniqlandi';
+        loadListings();
+      },
+      () => {
+        document.getElementById('locationBanner').textContent = '📍 Joylashuvga ruxsat berilmadi';
+      }
+    );
+  }
+
+  document.getElementById('locationBanner').addEventListener('click', requestLocation);
+
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      currentCategory = chip.dataset.cat;
+      loadListings();
+    });
+  });
+
+  async function loadListings() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '<div class="loading">Yuklanmoqda...</div>';
+
+    let url = `/api/listings?kategoriya=${encodeURIComponent(currentCategory)}`;
+    if (userLat !== null && userLon !== null) {
+      url += `&lat=${userLat}&lon=${userLon}`;
+    }
+
+    try {
+      const res = await fetch(url);
+      const items = await res.json();
+
+      document.getElementById('countLabel').textContent = `${items.length} ta e'lon`;
+
+      if (items.length === 0) {
+        grid.innerHTML = '<div class="empty-state">Hozircha e\'lon yo\'q.<br>Botga qaytib, birinchi bo\'lib e\'lon joylang!</div>';
+        return;
+      }
+
+      grid.innerHTML = '';
+      items.forEach(item => {
+        const distanceText = item.distance_km !== null ? `📍 ${item.distance_km} km` : item.kategoriya;
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <img class="thumb" src="${item.photo_url}" alt="${item.tavsif}" loading="lazy">
+          <div class="card-body">
+            <div class="name">${item.tavsif}</div>
+            <div class="meta-row">
+              <span class="region-tag">${distanceText}</span>
+              <span class="price">${item.narx}</span>
+            </div>
+            <div class="btn-row">
+              <a class="call-btn" href="tel:${item.telefon}">📞 Qo'ng'iroq</a>
+              <a class="nav-btn" href="https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lon}" target="_blank">🗺️ Yo'nalish</a>
+            </div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    } catch (e) {
+      grid.innerHTML = '<div class="empty-state">Xatolik yuz berdi. Qayta urinib ko\'ring.</div>';
+    }
+  }
+
+  loadListings();
+</script>
+
+</body>
+</html>
