@@ -21,6 +21,9 @@ import sqlite3
 import math
 import threading
 import json
+import hmac
+import hashlib
+import urllib.parse
 from datetime import datetime
 
 import requests
@@ -53,7 +56,13 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "SIZNING_BOT_TOKENINGIZ_BU_YERGA")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
 MINI_APP_URL = os.environ.get("MINI_APP_URL", "")
 PORT = int(os.environ.get("PORT", "8000"))
-DB_PATH = os.path.join(os.path.dirname(__file__), "chorva.db")
+
+# DB_DIR — Railway'da "Volume" (doimiy xotira) ulanganda shu yerga yozing (masalan /data)
+# Agar DB_DIR o'rnatilmagan bo'lsa, oddiy joyga yoziladi (lekin bu holda Railway qayta
+# ishga tushganda ma'lumot yo'qolishi mumkin — shuning uchun volume qo'shish tavsiya etiladi)
+DB_DIR = os.environ.get("DB_DIR", os.path.dirname(__file__))
+os.makedirs(DB_DIR, exist_ok=True)
+DB_PATH = os.path.join(DB_DIR, "chorva.db")
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -61,6 +70,39 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 CATEGORIES = ["🐄 Mol", "🐑 Qo'y", "🐐 Echki"]
+
+# ---------------------------------------------------------------------------
+# XAVFSIZLIK: Telegram Mini App'dan kelgan initData'ni tekshirish
+# ---------------------------------------------------------------------------
+# Bu funksiya Telegramning rasmiy yo'riqnomasiga asoslangan: initData ichidagi
+# "hash" qiymatini bot tokeni yordamida qayta hisoblab, mos kelishini tekshiradi.
+# Agar mos kelmasa — bu ma'lumot soxta (birov o'zgartirgan) degani, va rad etiladi.
+
+
+def verify_telegram_init_data(init_data: str):
+    if not init_data:
+        return None
+    try:
+        parsed = dict(urllib.parse.parse_qsl(init_data, strict_parsing=True))
+        received_hash = parsed.pop("hash", None)
+        if not received_hash:
+            return None
+
+        data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
+        secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
+        computed_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+
+        if not hmac.compare_digest(computed_hash, received_hash):
+            return None
+
+        user_json = parsed.get("user")
+        if not user_json:
+            return None
+        user = json.loads(user_json)
+        return user  # {"id": ..., "first_name": ..., ...}
+    except Exception as e:
+        logger.warning("initData tekshirishda xatolik: %s", e)
+        return None
 
 (
     CHOOSING_MODE,
@@ -287,9 +329,10 @@ STATUS_LABELS = {
 
 @flask_app.route("/api/my-listings")
 def api_my_listings():
-    telegram_id = request.args.get("telegram_id", type=int)
-    if not telegram_id:
-        return jsonify({"error": "telegram_id kerak"}), 400
+    user = verify_telegram_init_data(request.args.get("init_data", ""))
+    if not user:
+        return jsonify({"error": "Tasdiqlanmagan so'rov. Mini App'ni Telegram orqali oching."}), 401
+    telegram_id = user["id"]
 
     rows = get_my_listings(telegram_id)
     result = []
@@ -312,10 +355,14 @@ def api_my_listings():
 @flask_app.route("/api/mark-sold", methods=["POST"])
 def api_mark_sold():
     data = request.get_json(force=True)
+    user = verify_telegram_init_data(data.get("init_data", ""))
+    if not user:
+        return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov"}), 401
+    telegram_id = user["id"]
+
     listing_id = data.get("id")
-    telegram_id = data.get("telegram_id")
-    if not listing_id or not telegram_id:
-        return jsonify({"success": False, "error": "id va telegram_id kerak"}), 400
+    if not listing_id:
+        return jsonify({"success": False, "error": "id kerak"}), 400
     success = mark_as_sold(listing_id, telegram_id)
     return jsonify({"success": success})
 
@@ -323,10 +370,14 @@ def api_mark_sold():
 @flask_app.route("/api/delete-listing", methods=["POST"])
 def api_delete_listing():
     data = request.get_json(force=True)
+    user = verify_telegram_init_data(data.get("init_data", ""))
+    if not user:
+        return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov"}), 401
+    telegram_id = user["id"]
+
     listing_id = data.get("id")
-    telegram_id = data.get("telegram_id")
-    if not listing_id or not telegram_id:
-        return jsonify({"success": False, "error": "id va telegram_id kerak"}), 400
+    if not listing_id:
+        return jsonify({"success": False, "error": "id kerak"}), 400
     success = delete_own_listing(listing_id, telegram_id)
     return jsonify({"success": success})
 
@@ -334,7 +385,11 @@ def api_delete_listing():
 @flask_app.route("/api/create-listing", methods=["POST"])
 def api_create_listing():
     try:
-        telegram_id = int(request.form.get("telegram_id"))
+        user = verify_telegram_init_data(request.form.get("init_data", ""))
+        if not user:
+            return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov. Mini App'ni Telegram orqali oching."}), 401
+        telegram_id = user["id"]
+
         kategoriya = request.form.get("kategoriya", "").strip()
         tavsif = request.form.get("tavsif", "").strip()
         narx = request.form.get("narx", "").strip()
@@ -343,7 +398,7 @@ def api_create_listing():
         lon = float(request.form.get("lon"))
         photo = request.files.get("photo")
 
-        if not all([telegram_id, kategoriya, tavsif, narx, telefon, photo]):
+        if not all([kategoriya, tavsif, narx, telefon, photo]):
             return jsonify({"success": False, "error": "Barcha maydonlarni to'ldiring"}), 400
 
         # Avval bo'sh rasm bilan yozuvni yaratamiz (id olish uchun)
