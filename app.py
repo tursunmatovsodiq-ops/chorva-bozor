@@ -265,7 +265,11 @@ flask_app = Flask(__name__)
 
 @flask_app.route("/")
 def index():
-    return render_template("index.html")
+    resp = flask_app.make_response(render_template("index.html"))
+    # Telegram Mini App sahifani keshlab qo'ymasligi uchun — har doim eng yangi versiyani olib turadi
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 @flask_app.route("/api/listings")
