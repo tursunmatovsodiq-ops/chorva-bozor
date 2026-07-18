@@ -69,6 +69,88 @@
 
   .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 13.5px; line-height: 1.6; }
   .loading { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 13.5px; }
+
+  /* Pastki tab navigatsiyasi */
+  .bottom-nav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--card); border-top: 1px solid var(--line);
+    display: flex; padding: 6px 0 max(6px, env(safe-area-inset-bottom));
+    z-index: 100;
+  }
+  .nav-btn-tab {
+    flex: 1; text-align: center; padding: 8px 0;
+    font-size: 11.5px; font-weight: 700; color: var(--muted);
+    border: none; background: none; cursor: pointer;
+  }
+  .nav-btn-tab .icon { font-size: 20px; display: block; margin-bottom: 2px; }
+  .nav-btn-tab.active { color: var(--brown); }
+  body { padding-bottom: 64px; }
+
+  /* Profil */
+  .profile-list { padding: 12px 14px 20px; display: flex; flex-direction: column; gap: 10px; }
+  .profile-card {
+    background: var(--card); border-radius: 14px; border: 1px solid var(--line);
+    display: flex; gap: 10px; padding: 10px;
+  }
+  .profile-thumb { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; background: #EDE4D0; flex-shrink: 0; }
+  .profile-info { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .profile-info .p-name { font-size: 13px; font-weight: 700; }
+  .profile-info .p-price { font-size: 12px; color: var(--muted); }
+  .status-pill {
+    display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px;
+    border-radius: 20px; margin-top: 2px; width: fit-content;
+  }
+  .status-pill.pending { background: #F0E4D0; color: var(--gold-dark); }
+  .status-pill.approved { background: #DDEEE0; color: #3F7A4F; }
+  .status-pill.rejected { background: #F5DADA; color: #A33; }
+  .status-pill.sold { background: #E0E0E0; color: #666; }
+  .profile-actions { display: flex; gap: 6px; margin-top: 6px; }
+  .profile-actions button {
+    font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 8px; border: none; cursor: pointer;
+  }
+  .btn-sold { background: var(--gold); color: var(--ink); }
+  .btn-delete { background: #F5DADA; color: #A33; }
+
+  /* E'lon berish formasi */
+  .form-wrap { padding: 14px 14px 20px; display: flex; flex-direction: column; gap: 14px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group label { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+  .form-group input[type="text"],
+  .form-group input[type="tel"],
+  .form-group textarea,
+  .form-group select {
+    border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px;
+    font-family: 'Manrope', sans-serif; font-size: 13.5px; background: var(--card); color: var(--ink);
+  }
+  .form-group textarea { resize: vertical; min-height: 60px; }
+  .cat-select-row { display: flex; gap: 8px; }
+  .cat-option {
+    flex: 1; text-align: center; padding: 10px 0; border-radius: 10px;
+    border: 1.5px solid var(--line); font-size: 12.5px; font-weight: 700; background: var(--card);
+  }
+  .cat-option.selected { background: var(--brown); border-color: var(--brown); color: white; }
+  .photo-upload-box {
+    border: 2px dashed var(--line); border-radius: 12px; padding: 20px;
+    text-align: center; color: var(--muted); font-size: 12.5px; font-weight: 600;
+    position: relative; cursor: pointer;
+  }
+  .photo-upload-box img { max-width: 100%; max-height: 160px; border-radius: 10px; margin-top: 8px; }
+  .photo-upload-box input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer;
+  }
+  .location-btn {
+    border: 1.5px solid var(--gold); background: #F0E4D0; color: var(--brown-dark);
+    border-radius: 10px; padding: 10px; font-size: 12.5px; font-weight: 700; text-align: center;
+  }
+  .location-btn.confirmed { background: #DDEEE0; border-color: #3F7A4F; color: #3F7A4F; }
+  .submit-btn {
+    background: var(--gold); color: var(--ink); border: none; border-radius: 12px;
+    padding: 14px 0; font-size: 14.5px; font-weight: 800; margin-top: 4px;
+  }
+  .submit-btn:disabled { opacity: 0.5; }
+  .form-msg { text-align: center; font-size: 12.5px; font-weight: 700; padding: 8px; border-radius: 10px; }
+  .form-msg.success { background: #DDEEE0; color: #3F7A4F; }
+  .form-msg.error { background: #F5DADA; color: #A33; }
 </style>
 </head>
 <body>
@@ -82,20 +164,300 @@
 
   <div class="location-banner" id="locationBanner">📍 Joylashuvni yoqib, yaqin e'lonlarni ko'ring</div>
 
-  <div class="catalog-header">
+  <div class="catalog-header" id="catalogHeader">
     <h2>Mahsulotlar</h2>
     <div class="count" id="countLabel">Yuklanmoqda...</div>
   </div>
 
   <div class="grid" id="grid"></div>
 
+  <!-- PROFIL SAHIFASI -->
+  <div id="profileView" style="display:none;">
+    <div class="catalog-header">
+      <h2>👤 Mening e'lonlarim</h2>
+      <div class="count" id="profileCount">Yuklanmoqda...</div>
+    </div>
+    <div class="profile-list" id="profileList"></div>
+  </div>
+
+  <!-- E'LON BERISH FORMASI -->
+  <div id="createView" style="display:none;">
+    <div class="catalog-header">
+      <h2>➕ Yangi e'lon</h2>
+      <div class="count">Chorva mollarini sotish uchun e'lon joylang</div>
+    </div>
+    <div class="form-wrap">
+
+      <div class="form-group">
+        <label>Turi</label>
+        <div class="cat-select-row" id="formCatRow">
+          <div class="cat-option" data-cat="🐄 Mol">🐄 Mol</div>
+          <div class="cat-option" data-cat="🐑 Qo'y">🐑 Qo'y</div>
+          <div class="cat-option" data-cat="🐐 Echki">🐐 Echki</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Rasm</label>
+        <div class="photo-upload-box" id="photoBox">
+          <span id="photoBoxText">📸 Rasmni tanlash uchun bosing</span>
+          <img id="photoPreview" style="display:none;" alt="">
+          <input type="file" accept="image/*" capture="environment" id="photoInput">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Tavsif (yoshi, jinsi, holati)</label>
+        <textarea id="formDesc" placeholder="Masalan: 3 yoshli qorabayir sigir, sog'in"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Narx</label>
+        <input type="text" id="formPrice" placeholder="Masalan: 14 mln so'm">
+      </div>
+
+      <div class="form-group">
+        <label>Telefon</label>
+        <input type="tel" id="formPhone" placeholder="+998 90 123 45 67">
+      </div>
+
+      <div class="form-group">
+        <label>Joylashuv</label>
+        <div class="location-btn" id="formLocationBtn">📍 Joylashuvni aniqlash</div>
+      </div>
+
+      <div id="formMsg"></div>
+
+      <button class="submit-btn" id="submitBtn" disabled>✅ E'lonni yuborish</button>
+    </div>
+  </div>
+
+  <div class="bottom-nav">
+    <button class="nav-btn-tab active" id="tabCatalog" onclick="switchTab('catalog')">
+      <span class="icon">🐄</span>Katalog
+    </button>
+    <button class="nav-btn-tab" id="tabCreate" onclick="switchTab('create')">
+      <span class="icon">➕</span>E'lon berish
+    </button>
+    <button class="nav-btn-tab" id="tabProfile" onclick="switchTab('profile')">
+      <span class="icon">👤</span>Profil
+    </button>
+  </div>
+
 <script>
   const tg = window.Telegram ? window.Telegram.WebApp : null;
   if (tg) { tg.ready(); tg.expand(); }
 
+  const currentUserId = tg && tg.initDataUnsafe && tg.initDataUnsafe.user
+    ? tg.initDataUnsafe.user.id
+    : null;
+
   let currentCategory = 'all';
   let userLat = null;
   let userLon = null;
+
+  function switchTab(tab) {
+    document.getElementById('tabCatalog').classList.toggle('active', tab === 'catalog');
+    document.getElementById('tabCreate').classList.toggle('active', tab === 'create');
+    document.getElementById('tabProfile').classList.toggle('active', tab === 'profile');
+
+    document.getElementById('chips').style.display = tab === 'catalog' ? 'flex' : 'none';
+    document.getElementById('locationBanner').style.display = tab === 'catalog' ? 'flex' : 'none';
+    document.getElementById('catalogHeader').style.display = tab === 'catalog' ? 'block' : 'none';
+    document.getElementById('grid').style.display = tab === 'catalog' ? 'grid' : 'none';
+
+    document.getElementById('createView').style.display = tab === 'create' ? 'block' : 'none';
+    document.getElementById('profileView').style.display = tab === 'profile' ? 'block' : 'none';
+
+    if (tab === 'profile') loadProfile();
+  }
+
+  // ---------------- E'LON BERISH FORMASI ----------------
+  let formCategory = null;
+  let formPhotoFile = null;
+  let formLat = null;
+  let formLon = null;
+
+  document.querySelectorAll('#formCatRow .cat-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      document.querySelectorAll('#formCatRow .cat-option').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+      formCategory = opt.dataset.cat;
+      checkFormValid();
+    });
+  });
+
+  document.getElementById('photoInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    formPhotoFile = file;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      document.getElementById('photoBoxText').style.display = 'none';
+      const preview = document.getElementById('photoPreview');
+      preview.src = ev.target.result;
+      preview.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+    checkFormValid();
+  });
+
+  document.getElementById('formLocationBtn').addEventListener('click', () => {
+    if (!navigator.geolocation) return;
+    document.getElementById('formLocationBtn').textContent = '📍 Aniqlanmoqda...';
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        formLat = pos.coords.latitude;
+        formLon = pos.coords.longitude;
+        const btn = document.getElementById('formLocationBtn');
+        btn.textContent = '✅ Joylashuv aniqlandi';
+        btn.classList.add('confirmed');
+        checkFormValid();
+      },
+      () => {
+        document.getElementById('formLocationBtn').textContent = '❌ Ruxsat berilmadi, qayta urinish';
+      }
+    );
+  });
+
+  ['formDesc', 'formPrice', 'formPhone'].forEach(id => {
+    document.getElementById(id).addEventListener('input', checkFormValid);
+  });
+
+  function checkFormValid() {
+    const desc = document.getElementById('formDesc').value.trim();
+    const price = document.getElementById('formPrice').value.trim();
+    const phone = document.getElementById('formPhone').value.trim();
+    const valid = formCategory && formPhotoFile && formLat !== null && desc && price && phone;
+    document.getElementById('submitBtn').disabled = !valid;
+  }
+
+  document.getElementById('submitBtn').addEventListener('click', async () => {
+    const msgBox = document.getElementById('formMsg');
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Yuborilmoqda...';
+
+    const fd = new FormData();
+    fd.append('telegram_id', currentUserId || '');
+    fd.append('kategoriya', formCategory);
+    fd.append('tavsif', document.getElementById('formDesc').value.trim());
+    fd.append('narx', document.getElementById('formPrice').value.trim());
+    fd.append('telefon', document.getElementById('formPhone').value.trim());
+    fd.append('lat', formLat);
+    fd.append('lon', formLon);
+    fd.append('photo', formPhotoFile);
+
+    try {
+      const res = await fetch('/api/create-listing', { method: 'POST', body: fd });
+      const result = await res.json();
+      if (result.success) {
+        msgBox.innerHTML = '<div class="form-msg success">✅ E\'loningiz yuborildi! Admin tekshirgach, katalogda chiqadi.</div>';
+        resetForm();
+      } else {
+        msgBox.innerHTML = `<div class="form-msg error">Xatolik: ${result.error || 'nomalum xatolik'}</div>`;
+      }
+    } catch (e) {
+      msgBox.innerHTML = '<div class="form-msg error">Internet xatoligi. Qayta urinib ko\'ring.</div>';
+    }
+    btn.textContent = '✅ E\'lonni yuborish';
+    checkFormValid();
+  });
+
+  function resetForm() {
+    formCategory = null;
+    formPhotoFile = null;
+    formLat = null;
+    formLon = null;
+    document.querySelectorAll('#formCatRow .cat-option').forEach(o => o.classList.remove('selected'));
+    document.getElementById('formDesc').value = '';
+    document.getElementById('formPrice').value = '';
+    document.getElementById('formPhone').value = '';
+    document.getElementById('photoInput').value = '';
+    document.getElementById('photoBoxText').style.display = 'inline';
+    document.getElementById('photoPreview').style.display = 'none';
+    const btn = document.getElementById('formLocationBtn');
+    btn.textContent = '📍 Joylashuvni aniqlash';
+    btn.classList.remove('confirmed');
+    document.getElementById('submitBtn').disabled = true;
+  }
+
+  async function loadProfile() {
+    const list = document.getElementById('profileList');
+    const countLabel = document.getElementById('profileCount');
+
+    if (!currentUserId) {
+      countLabel.textContent = '';
+      list.innerHTML = '<div class="empty-state">Profilni ko\'rish uchun Mini App\'ni Telegram orqali oching.</div>';
+      return;
+    }
+
+    list.innerHTML = '<div class="loading">Yuklanmoqda...</div>';
+
+    try {
+      const res = await fetch(`/api/my-listings?telegram_id=${currentUserId}`);
+      const items = await res.json();
+
+      countLabel.textContent = `${items.length} ta e'lon`;
+
+      if (items.length === 0) {
+        list.innerHTML = '<div class="empty-state">Hali e\'lon joylamagansiz.<br>Botga qaytib, birinchi e\'loningizni qo\'shing!</div>';
+        return;
+      }
+
+      list.innerHTML = '';
+      items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'profile-card';
+        const showActions = item.status === 'approved';
+        card.innerHTML = `
+          <img class="profile-thumb" src="${item.photo_url}" alt="">
+          <div class="profile-info">
+            <div class="p-name">${item.tavsif}</div>
+            <div class="p-price">${item.narx}</div>
+            <span class="status-pill ${item.status}">${item.status_label}</span>
+            ${showActions ? `
+              <div class="profile-actions">
+                <button class="btn-sold" onclick="markSold(${item.id})">✅ Sotildi</button>
+                <button class="btn-delete" onclick="deleteListing(${item.id})">🗑️ O'chirish</button>
+              </div>
+            ` : ''}
+          </div>
+        `;
+        list.appendChild(card);
+      });
+    } catch (e) {
+      list.innerHTML = '<div class="empty-state">Xatolik yuz berdi.</div>';
+    }
+  }
+
+  async function markSold(id) {
+    if (!confirm('Bu e\'lonni "sotildi" deb belgilaysizmi?')) return;
+    try {
+      await fetch('/api/mark-sold', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, telegram_id: currentUserId }),
+      });
+      loadProfile();
+    } catch (e) {
+      alert('Xatolik yuz berdi.');
+    }
+  }
+
+  async function deleteListing(id) {
+    if (!confirm('E\'lonni butunlay o\'chirishni xohlaysizmi?')) return;
+    try {
+      await fetch('/api/delete-listing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, telegram_id: currentUserId }),
+      });
+      loadProfile();
+    } catch (e) {
+      alert('Xatolik yuz berdi.');
+    }
+  }
 
   function requestLocation() {
     if (!navigator.geolocation) return;
