@@ -20,6 +20,7 @@ import os
 import sqlite3
 import math
 import threading
+import json
 from datetime import datetime
 
 import requests
@@ -126,6 +127,14 @@ def set_listing_status(listing_id, status):
     conn.close()
 
 
+def set_listing_photo(listing_id, photo_file_id):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("UPDATE listings SET photo_file_id = ? WHERE id = ?", (photo_file_id, listing_id))
+    conn.commit()
+    conn.close()
+
+
 def get_listing(listing_id):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
@@ -152,6 +161,45 @@ def search_listings(kategoriya=None):
     rows = cur.fetchall()
     conn.close()
     return rows
+
+
+def get_my_listings(telegram_id):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT id, kategoriya, tavsif, narx, photo_file_id, status, sana FROM listings
+           WHERE telegram_id = ? ORDER BY id DESC""",
+        (telegram_id,),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+
+def mark_as_sold(listing_id, telegram_id):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE listings SET status = 'sold' WHERE id = ? AND telegram_id = ?",
+        (listing_id, telegram_id),
+    )
+    affected = cur.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def delete_own_listing(listing_id, telegram_id):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        "DELETE FROM listings WHERE id = ? AND telegram_id = ?",
+        (listing_id, telegram_id),
+    )
+    affected = cur.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
 
 
 def distance_km(lat1, lon1, lat2, lon2):
@@ -227,6 +275,145 @@ def photo(file_id):
     except Exception as e:
         logger.warning("Rasmni olishda xatolik: %s", e)
         return "", 404
+
+
+STATUS_LABELS = {
+    "pending": "⏳ Tekshirilmoqda",
+    "approved": "✅ Faol",
+    "rejected": "❌ Rad etilgan",
+    "sold": "💰 Sotildi",
+}
+
+
+@flask_app.route("/api/my-listings")
+def api_my_listings():
+    telegram_id = request.args.get("telegram_id", type=int)
+    if not telegram_id:
+        return jsonify({"error": "telegram_id kerak"}), 400
+
+    rows = get_my_listings(telegram_id)
+    result = []
+    for id_, kat, tavsif, narx, photo_file_id, status, sana in rows:
+        result.append(
+            {
+                "id": id_,
+                "kategoriya": kat,
+                "tavsif": tavsif,
+                "narx": narx,
+                "photo_url": f"/photo/{photo_file_id}",
+                "status": status,
+                "status_label": STATUS_LABELS.get(status, status),
+                "sana": sana,
+            }
+        )
+    return jsonify(result)
+
+
+@flask_app.route("/api/mark-sold", methods=["POST"])
+def api_mark_sold():
+    data = request.get_json(force=True)
+    listing_id = data.get("id")
+    telegram_id = data.get("telegram_id")
+    if not listing_id or not telegram_id:
+        return jsonify({"success": False, "error": "id va telegram_id kerak"}), 400
+    success = mark_as_sold(listing_id, telegram_id)
+    return jsonify({"success": success})
+
+
+@flask_app.route("/api/delete-listing", methods=["POST"])
+def api_delete_listing():
+    data = request.get_json(force=True)
+    listing_id = data.get("id")
+    telegram_id = data.get("telegram_id")
+    if not listing_id or not telegram_id:
+        return jsonify({"success": False, "error": "id va telegram_id kerak"}), 400
+    success = delete_own_listing(listing_id, telegram_id)
+    return jsonify({"success": success})
+
+
+@flask_app.route("/api/create-listing", methods=["POST"])
+def api_create_listing():
+    try:
+        telegram_id = int(request.form.get("telegram_id"))
+        kategoriya = request.form.get("kategoriya", "").strip()
+        tavsif = request.form.get("tavsif", "").strip()
+        narx = request.form.get("narx", "").strip()
+        telefon = request.form.get("telefon", "").strip()
+        lat = float(request.form.get("lat"))
+        lon = float(request.form.get("lon"))
+        photo = request.files.get("photo")
+
+        if not all([telegram_id, kategoriya, tavsif, narx, telefon, photo]):
+            return jsonify({"success": False, "error": "Barcha maydonlarni to'ldiring"}), 400
+
+        # Avval bo'sh rasm bilan yozuvni yaratamiz (id olish uchun)
+        listing_id = add_listing(telegram_id, kategoriya, tavsif, narx, "", lat, lon, telefon)
+
+        # Rasmni Telegram'ga (admin chatiga) yuborib, undan file_id olamiz
+        admin_caption = (
+            f"🆕 Yangi e'lon (Mini App orqali, ID: {listing_id}):\n\n"
+            f"Turi: {kategoriya}\nTavsif: {tavsif}\nNarx: {narx}\nTelefon: {telefon}"
+        )
+        admin_keyboard = {
+            "inline_keyboard": [
+                [
+                    {"text": "✅ Tasdiqlash", "callback_data": f"admin:approve:{listing_id}"},
+                    {"text": "❌ Rad etish", "callback_data": f"admin:reject:{listing_id}"},
+                ]
+            ]
+        }
+
+        file_id = None
+        if ADMIN_ID:
+            resp = requests.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
+                data={
+                    "chat_id": ADMIN_ID,
+                    "caption": admin_caption,
+                    "reply_markup": json.dumps(admin_keyboard),
+                },
+                files={"photo": (photo.filename, photo.stream, photo.mimetype)},
+                timeout=20,
+            )
+            result = resp.json()
+            if result.get("ok"):
+                photos = result["result"]["photo"]
+                file_id = photos[-1]["file_id"]
+
+        if not file_id:
+            # Admin sozlanmagan yoki xatolik bo'lsa, e'lonni foydalanuvchining o'ziga yuboramiz
+            photo.stream.seek(0)
+            resp2 = requests.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
+                data={"chat_id": telegram_id},
+                files={"photo": (photo.filename, photo.stream, photo.mimetype)},
+                timeout=20,
+            )
+            result2 = resp2.json()
+            if result2.get("ok"):
+                file_id = result2["result"]["photo"][-1]["file_id"]
+
+        if file_id:
+            set_listing_photo(listing_id, file_id)
+
+        # Foydalanuvchiga tasdiq xabari
+        try:
+            requests.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                data={
+                    "chat_id": telegram_id,
+                    "text": "Rahmat! E'loningiz admin tomonidan tekshirilmoqda.",
+                },
+                timeout=10,
+            )
+        except Exception as e:
+            logger.warning("Foydalanuvchiga xabar yuborishda xatolik: %s", e)
+
+        return jsonify({"success": True, "id": listing_id})
+
+    except Exception as e:
+        logger.warning("E'lon yaratishda xatolik: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # ---------------------------------------------------------------------------
