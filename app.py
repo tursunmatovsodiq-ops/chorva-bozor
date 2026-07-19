@@ -33,9 +33,6 @@ from flask import Flask, jsonify, request, redirect, render_template
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    KeyboardButton,
-    ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
     Update,
     WebAppInfo,
 )
@@ -44,9 +41,6 @@ from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
-    ConversationHandler,
-    MessageHandler,
-    filters,
 )
 
 # ---------------------------------------------------------------------------
@@ -70,7 +64,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CATEGORIES = ["🐄 Mol", "🐑 Qo'y", "🐐 Echki"]
+CATEGORIES = ["🐄 Mol", "🐑 Qo'y", "🐐 Echki", "🐔 Parranda", "🌾 Yem-hashak"]
 
 # ---------------------------------------------------------------------------
 # XAVFSIZLIK: Telegram Mini App'dan kelgan initData'ni tekshirish
@@ -112,19 +106,6 @@ def verify_telegram_init_data(init_data: str):
         logger.warning("initData tekshirishda xatolik: %s", e)
         return None
 
-(
-    CHOOSING_MODE,
-    SELL_CATEGORY,
-    SELL_PHOTO,
-    SELL_DESC,
-    SELL_PRICE,
-    SELL_LOCATION,
-    SELL_PHONE,
-    SELL_CONFIRM,
-    BUY_CATEGORY,
-    BUY_LOCATION,
-) = range(10)
-
 
 # ---------------------------------------------------------------------------
 # MA'LUMOTLAR BAZASI
@@ -154,14 +135,15 @@ def init_db():
     conn.close()
 
 
-def add_listing(telegram_id, kategoriya, tavsif, narx, photo_file_id, lat, lon, telefon):
+def add_listing(telegram_id, kategoriya, tavsif, narx, photo_file_ids, lat, lon, telefon):
+    """photo_file_ids — bitta yoki bir nechta file_id, '|' bilan ajratilgan"""
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute(
         """INSERT INTO listings
            (telegram_id, kategoriya, tavsif, narx, photo_file_id, lat, lon, telefon, status, sana)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)""",
-        (telegram_id, kategoriya, tavsif, narx, photo_file_id, lat, lon, telefon, datetime.now().isoformat()),
+        (telegram_id, kategoriya, tavsif, narx, photo_file_ids, lat, lon, telefon, datetime.now().isoformat()),
     )
     conn.commit()
     listing_id = cur.lastrowid
@@ -177,10 +159,10 @@ def set_listing_status(listing_id, status):
     conn.close()
 
 
-def set_listing_photo(listing_id, photo_file_id):
+def set_listing_photos(listing_id, photo_file_ids):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("UPDATE listings SET photo_file_id = ? WHERE id = ?", (photo_file_id, listing_id))
+    cur.execute("UPDATE listings SET photo_file_id = ? WHERE id = ?", (photo_file_ids, listing_id))
     conn.commit()
     conn.close()
 
@@ -194,20 +176,19 @@ def get_listing(listing_id):
     return row
 
 
-def search_listings(kategoriya=None):
+def search_listings(kategoriya=None, search_text=None):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    if kategoriya and kategoriya != "all":
-        cur.execute(
-            """SELECT id, kategoriya, tavsif, narx, photo_file_id, lat, lon, telefon FROM listings
-               WHERE kategoriya = ? AND status = 'approved'""",
-            (kategoriya,),
-        )
-    else:
-        cur.execute(
-            """SELECT id, kategoriya, tavsif, narx, photo_file_id, lat, lon, telefon FROM listings
+    query = """SELECT id, kategoriya, tavsif, narx, photo_file_id, lat, lon, telefon FROM listings
                WHERE status = 'approved'"""
-        )
+    params = []
+    if kategoriya and kategoriya != "all":
+        query += " AND kategoriya = ?"
+        params.append(kategoriya)
+    if search_text:
+        query += " AND tavsif LIKE ?"
+        params.append(f"%{search_text}%")
+    cur.execute(query, params)
     rows = cur.fetchall()
     conn.close()
     return rows
@@ -252,6 +233,14 @@ def delete_own_listing(listing_id, telegram_id):
     return affected > 0
 
 
+def photo_ids_to_urls(photo_file_id_field):
+    """'id1|id2|id3' -> ['/photo/id1', '/photo/id2', '/photo/id3']"""
+    if not photo_file_id_field:
+        return []
+    ids = [x for x in photo_file_id_field.split("|") if x]
+    return [f"/photo/{fid}" for fid in ids]
+
+
 def distance_km(lat1, lon1, lat2, lon2):
     R = 6371
     dlat = math.radians(lat2 - lat1)
@@ -283,23 +272,26 @@ def index():
 @flask_app.route("/api/listings")
 def api_listings():
     kategoriya = request.args.get("kategoriya", "all")
+    search_text = request.args.get("q", "").strip()
     lat = request.args.get("lat", type=float)
     lon = request.args.get("lon", type=float)
 
-    rows = search_listings(kategoriya)
+    rows = search_listings(kategoriya, search_text if search_text else None)
 
     result = []
     for id_, kat, tavsif, narx, photo_file_id, item_lat, item_lon, telefon in rows:
         dist = None
         if lat is not None and lon is not None and item_lat is not None and item_lon is not None:
             dist = round(distance_km(lat, lon, item_lat, item_lon), 1)
+        photo_urls = photo_ids_to_urls(photo_file_id)
         result.append(
             {
                 "id": id_,
                 "kategoriya": kat,
                 "tavsif": tavsif,
                 "narx": narx,
-                "photo_url": f"/photo/{photo_file_id}",
+                "photo_url": photo_urls[0] if photo_urls else "",
+                "photo_urls": photo_urls,
                 "telefon": telefon,
                 "distance_km": dist,
                 "lat": item_lat,
@@ -371,13 +363,15 @@ def api_my_listings():
     rows = get_my_listings(telegram_id)
     result = []
     for id_, kat, tavsif, narx, photo_file_id, status, sana in rows:
+        photo_urls = photo_ids_to_urls(photo_file_id)
         result.append(
             {
                 "id": id_,
                 "kategoriya": kat,
                 "tavsif": tavsif,
                 "narx": narx,
-                "photo_url": f"/photo/{photo_file_id}",
+                "photo_url": photo_urls[0] if photo_urls else "",
+                "photo_urls": photo_urls,
                 "status": status,
                 "status_label": STATUS_LABELS.get(status, status),
                 "sana": sana,
@@ -429,15 +423,14 @@ def api_create_listing():
         telefon = request.form.get("telefon", "").strip()
         lat = float(request.form.get("lat"))
         lon = float(request.form.get("lon"))
-        photo = request.files.get("photo")
+        photos = request.files.getlist("photos")[:3]  # eng ko'pi bilan 3 ta rasm
 
-        if not all([kategoriya, tavsif, narx, telefon, photo]):
+        if not all([kategoriya, tavsif, narx, telefon]) or not photos:
             return jsonify({"success": False, "error": "Barcha maydonlarni to'ldiring"}), 400
 
         # Avval bo'sh rasm bilan yozuvni yaratamiz (id olish uchun)
         listing_id = add_listing(telegram_id, kategoriya, tavsif, narx, "", lat, lon, telefon)
 
-        # Rasmni Telegram'ga (admin chatiga) yuborib, undan file_id olamiz
         admin_caption = (
             f"🆕 Yangi e'lon (Mini App orqali, ID: {listing_id}):\n\n"
             f"Turi: {kategoriya}\nTavsif: {tavsif}\nNarx: {narx}\nTelefon: {telefon}"
@@ -451,38 +444,30 @@ def api_create_listing():
             ]
         }
 
-        file_id = None
-        if ADMIN_ID:
-            resp = requests.post(
-                f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
-                data={
-                    "chat_id": ADMIN_ID,
-                    "caption": admin_caption,
-                    "reply_markup": json.dumps(admin_keyboard),
-                },
-                files={"photo": (photo.filename, photo.stream, photo.mimetype)},
-                timeout=20,
-            )
-            result = resp.json()
-            if result.get("ok"):
-                photos = result["result"]["photo"]
-                file_id = photos[-1]["file_id"]
+        file_ids = []
+        target_chat = ADMIN_ID if ADMIN_ID else telegram_id
 
-        if not file_id:
-            # Admin sozlanmagan yoki xatolik bo'lsa, e'lonni foydalanuvchining o'ziga yuboramiz
-            photo.stream.seek(0)
-            resp2 = requests.post(
-                f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
-                data={"chat_id": telegram_id},
-                files={"photo": (photo.filename, photo.stream, photo.mimetype)},
-                timeout=20,
-            )
-            result2 = resp2.json()
-            if result2.get("ok"):
-                file_id = result2["result"]["photo"][-1]["file_id"]
+        for i, photo in enumerate(photos):
+            try:
+                data = {"chat_id": target_chat}
+                if i == 0:
+                    # Faqat birinchi rasmga tavsif va tasdiqlash tugmalarini qo'shamiz
+                    data["caption"] = admin_caption
+                    data["reply_markup"] = json.dumps(admin_keyboard)
+                resp = requests.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
+                    data=data,
+                    files={"photo": (photo.filename, photo.stream, photo.mimetype)},
+                    timeout=20,
+                )
+                result = resp.json()
+                if result.get("ok"):
+                    file_ids.append(result["result"]["photo"][-1]["file_id"])
+            except Exception as e:
+                logger.warning("Rasm %d ni yuborishda xatolik: %s", i, e)
 
-        if file_id:
-            set_listing_photo(listing_id, file_id)
+        if file_ids:
+            set_listing_photos(listing_id, "|".join(file_ids))
 
         # Foydalanuvchiga tasdiq xabari
         try:
@@ -508,168 +493,37 @@ def api_create_listing():
 # TELEGRAM BOT — YORDAMCHI
 # ---------------------------------------------------------------------------
 
-def build_keyboard(options, prefix, columns=2):
-    buttons = [InlineKeyboardButton(opt, callback_data=f"{prefix}:{opt}") for opt in options]
-    rows = [buttons[i : i + columns] for i in range(0, len(buttons), columns)]
-    return InlineKeyboardMarkup(rows)
-
-
-location_keyboard = ReplyKeyboardMarkup(
-    [[KeyboardButton("📍 Joylashuvni yuborish", request_location=True)]],
-    resize_keyboard=True,
-    one_time_keyboard=True,
-)
-
-
 # ---------------------------------------------------------------------------
-# /start VA REJIM TANLASH
+# /start — ILOVANI OCHISH TUGMASI
 # ---------------------------------------------------------------------------
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data.clear()
-    buttons = [
-        [InlineKeyboardButton("🐮 Sotmoqchiman", callback_data="mode:sell")],
-        [InlineKeyboardButton("🔍 Qidiryapman", callback_data="mode:buy")],
-    ]
-    if MINI_APP_URL:
-        # Har safar yangi "vaqt belgisi" qo'shiladi — shunda Telegram sahifani
-        # hech qachon eski (keshlangan) holatda ko'rsatmaydi, har doim eng yangisini oladi
-        fresh_url = f"{MINI_APP_URL}?v={int(time.time())}"
-        buttons.append([InlineKeyboardButton("📸 Katalogni ochish", web_app=WebAppInfo(url=fresh_url))])
-    keyboard = InlineKeyboardMarkup(buttons)
+def get_mini_app_url():
+    if not MINI_APP_URL:
+        return None
+    # Har safar yangi "vaqt belgisi" qo'shiladi — shunda Telegram sahifani
+    # hech qachon eski (keshlangan) holatda ko'rsatmaydi, har doim eng yangisini oladi
+    return f"{MINI_APP_URL}?v={int(time.time())}"
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    fresh_url = get_mini_app_url()
+    if fresh_url:
+        keyboard = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("🐄 Chorva Bozorni ochish", web_app=WebAppInfo(url=fresh_url))]]
+        )
+    else:
+        keyboard = None
+
     text = (
-        "Assalomu alaykum! Chorva Bozor botiga xush kelibsiz 🐄🐑🐐\n\n"
-        "🐮 Mol/qo'y/echki sotmoqchimisiz?\n"
-        "🔍 Yoki qidiryapsizmi?\n"
-        "📸 Yoki rasmli katalogni ko'rmoqchimisiz?"
+        "Assalomu alaykum! 🐄🐑🐐\n\n"
+        "Chorva Bozor — mol, qo'y, echki, parranda va yem-hashak "
+        "sotish/sotib olish uchun ilova.\n\n"
+        "Boshlash uchun pastdagi tugmani bosing 👇"
     )
     if update.message:
         await update.message.reply_text(text, reply_markup=keyboard)
     else:
-        await update.callback_query.edit_message_text(text, reply_markup=keyboard)
-    return CHOOSING_MODE
-
-
-async def mode_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    mode = query.data.split(":")[1]
-
-    if mode == "sell":
-        keyboard = build_keyboard(CATEGORIES, "sellcat")
-        await query.edit_message_text("Qaysi turdagi chorva sotmoqchisiz?", reply_markup=keyboard)
-        return SELL_CATEGORY
-    else:
-        keyboard = build_keyboard(CATEGORIES, "buycat")
-        await query.edit_message_text("Qaysi turdagi chorva kerak?", reply_markup=keyboard)
-        return BUY_CATEGORY
-
-
-# ---------------------------------------------------------------------------
-# SOTISH OQIMI
-# ---------------------------------------------------------------------------
-
-async def sell_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    context.user_data["kategoriya"] = query.data.split(":")[1]
-    await query.edit_message_text("📸 Hayvonning rasmini yuboring:")
-    return SELL_PHOTO
-
-
-async def sell_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if not update.message.photo:
-        await update.message.reply_text("Iltimos, rasm yuboring.")
-        return SELL_PHOTO
-    photo_file_id = update.message.photo[-1].file_id
-    context.user_data["photo_file_id"] = photo_file_id
-    await update.message.reply_text(
-        "✍️ Endi qisqacha tavsif kiriting (yoshi, jinsi, holati). Masalan: \"3 yoshli qorabayir sigir, sog'in\""
-    )
-    return SELL_DESC
-
-
-async def sell_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["tavsif"] = update.message.text.strip()
-    await update.message.reply_text("💰 Narxini kiriting:")
-    return SELL_PRICE
-
-
-async def sell_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["narx"] = update.message.text.strip()
-    await update.message.reply_text(
-        "📍 Endi joylashuvingizni yuboring:", reply_markup=location_keyboard
-    )
-    return SELL_LOCATION
-
-
-async def sell_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if not update.message.location:
-        await update.message.reply_text("Iltimos, pastdagi tugma orqali joylashuvingizni yuboring.")
-        return SELL_LOCATION
-    loc = update.message.location
-    context.user_data["lat"] = loc.latitude
-    context.user_data["lon"] = loc.longitude
-    await update.message.reply_text("📞 Telefon raqamingizni kiriting:", reply_markup=ReplyKeyboardRemove())
-    return SELL_PHONE
-
-
-async def sell_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["telefon"] = update.message.text.strip()
-    d = context.user_data
-    caption = (
-        f"✅ E'loningiz:\n\nTuri: {d['kategoriya']}\nTavsif: {d['tavsif']}\n"
-        f"Narx: {d['narx']}\nTelefon: {d['telefon']}\n\nTo'g'rimi?"
-    )
-    keyboard = InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("✅ Ha, yuborish", callback_data="sellconfirm:yes")],
-            [InlineKeyboardButton("❌ Bekor qilish", callback_data="sellconfirm:no")],
-        ]
-    )
-    await update.message.reply_photo(photo=d["photo_file_id"], caption=caption, reply_markup=keyboard)
-    return SELL_CONFIRM
-
-
-async def sell_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    choice = query.data.split(":")[1]
-
-    if choice == "no":
-        await query.message.reply_text("Bekor qilindi. /start bilan qayta boshlang.")
-        return ConversationHandler.END
-
-    d = context.user_data
-    telegram_id = update.effective_user.id
-    listing_id = add_listing(
-        telegram_id, d["kategoriya"], d["tavsif"], d["narx"], d["photo_file_id"], d["lat"], d["lon"], d["telefon"]
-    )
-
-    await query.message.reply_text("Rahmat! E'loningiz admin tomonidan tekshirilmoqda.")
-
-    if ADMIN_ID:
-        admin_caption = (
-            f"🆕 Yangi e'lon (ID: {listing_id}):\n\nTuri: {d['kategoriya']}\n"
-            f"Tavsif: {d['tavsif']}\nNarx: {d['narx']}\nTelefon: {d['telefon']}"
-        )
-        admin_keyboard = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton("✅ Tasdiqlash", callback_data=f"admin:approve:{listing_id}"),
-                    InlineKeyboardButton("❌ Rad etish", callback_data=f"admin:reject:{listing_id}"),
-                ]
-            ]
-        )
-        try:
-            await context.bot.send_photo(
-                chat_id=ADMIN_ID, photo=d["photo_file_id"], caption=admin_caption, reply_markup=admin_keyboard
-            )
-        except Exception as e:
-            logger.warning("Adminga xabar yuborishda xatolik: %s", e)
-
-    context.user_data.clear()
-    return ConversationHandler.END
+        await update.callback_query.message.reply_text(text, reply_markup=keyboard)
 
 
 async def admin_decision(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -702,61 +556,6 @@ async def admin_decision(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             logger.warning("Xabar yuborishda xatolik: %s", e)
 
 
-# ---------------------------------------------------------------------------
-# QIDIRISH OQIMI (bot ichida, matn tarzida - Mini App'ga qo'shimcha)
-# ---------------------------------------------------------------------------
-
-async def buy_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    context.user_data["kategoriya"] = query.data.split(":")[1]
-    await query.edit_message_text("📍 Joylashuvingizni yuboring:")
-    await query.message.reply_text("Pastdagi tugmani bosing:", reply_markup=location_keyboard)
-    return BUY_LOCATION
-
-
-async def buy_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if not update.message.location:
-        await update.message.reply_text("Iltimos, pastdagi tugma orqali joylashuvingizni yuboring.")
-        return BUY_LOCATION
-
-    user_lat = update.message.location.latitude
-    user_lon = update.message.location.longitude
-    kategoriya = context.user_data.get("kategoriya")
-
-    rows = search_listings(kategoriya)
-    await update.message.reply_text("Qidirilmoqda...", reply_markup=ReplyKeyboardRemove())
-
-    if not rows:
-        await update.message.reply_text(f"Afsuski, {kategoriya} bo'yicha hozircha e'lon yo'q.")
-        context.user_data.clear()
-        return ConversationHandler.END
-
-    with_distance = []
-    for id_, kat, tavsif, narx, photo_file_id, lat, lon, telefon in rows:
-        dist = distance_km(user_lat, user_lon, lat, lon)
-        with_distance.append((dist, tavsif, narx, photo_file_id, telefon))
-    with_distance.sort(key=lambda x: x[0])
-
-    await update.message.reply_text(f"📋 Topildi ({len(with_distance)} ta), eng yaqinidan boshlab:")
-    for dist, tavsif, narx, photo_file_id, telefon in with_distance[:10]:
-        caption = f"{tavsif}\n💰 {narx}\n📍 {dist:.1f} km uzoqlikda\n📞 {telefon}"
-        try:
-            await update.message.reply_photo(photo=photo_file_id, caption=caption)
-        except Exception as e:
-            logger.warning("Rasm yuborishda xatolik: %s", e)
-            await update.message.reply_text(caption)
-
-    context.user_data.clear()
-    return ConversationHandler.END
-
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data.clear()
-    await update.message.reply_text("Bekor qilindi. /start bilan qayta boshlang.", reply_markup=ReplyKeyboardRemove())
-    return ConversationHandler.END
-
-
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error("Xatolik yuz berdi: %s", context.error)
 
@@ -767,6 +566,23 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def run_flask():
     flask_app.run(host="0.0.0.0", port=PORT)
+
+
+async def post_init(application: Application) -> None:
+    """Bot ishga tushganda, doimiy 'Menu Button'ni sozlaymiz — shunda foydalanuvchi
+    /start yozmasdan, har doim pastdagi tugma orqali ilovani ocha oladi."""
+    if MINI_APP_URL:
+        try:
+            from telegram import MenuButtonWebApp
+
+            await application.bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(
+                    text="🐄 Bozorni ochish", web_app=WebAppInfo(url=MINI_APP_URL)
+                )
+            )
+            logger.info("Doimiy Menu Button muvaffaqiyatli sozlandi")
+        except Exception as e:
+            logger.warning("Menu Button sozlashda xatolik: %s", e)
 
 
 def main():
@@ -781,26 +597,9 @@ def main():
     flask_thread.start()
     print(f"Mini App serveri {PORT}-portda ishga tushdi...")
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
 
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
-        states={
-            CHOOSING_MODE: [CallbackQueryHandler(mode_chosen, pattern="^mode:")],
-            SELL_CATEGORY: [CallbackQueryHandler(sell_category, pattern="^sellcat:")],
-            SELL_PHOTO: [MessageHandler(filters.PHOTO, sell_photo)],
-            SELL_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, sell_desc)],
-            SELL_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, sell_price)],
-            SELL_LOCATION: [MessageHandler(filters.LOCATION, sell_location)],
-            SELL_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, sell_phone)],
-            SELL_CONFIRM: [CallbackQueryHandler(sell_confirm, pattern="^sellconfirm:")],
-            BUY_CATEGORY: [CallbackQueryHandler(buy_category, pattern="^buycat:")],
-            BUY_LOCATION: [MessageHandler(filters.LOCATION, buy_location)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel), CommandHandler("start", start)],
-    )
-
-    app.add_handler(conv_handler)
+    app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(admin_decision, pattern="^admin:"))
     app.add_error_handler(error_handler)
 
