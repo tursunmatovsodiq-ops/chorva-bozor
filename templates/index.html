@@ -42,13 +42,40 @@
     display: flex; align-items: center; gap: 8px; cursor: pointer;
   }
 
+  .search-box {
+    margin: 12px 14px 0;
+    display: flex; align-items: center; gap: 8px;
+    background: var(--card); border: 1.5px solid var(--line); border-radius: 14px;
+    padding: 11px 14px;
+  }
+  .search-box input {
+    flex: 1; border: none; outline: none; font-family: 'Manrope', sans-serif;
+    font-size: 14.5px; background: transparent; color: var(--ink);
+  }
+  .search-box .search-icon { font-size: 16px; color: var(--muted); }
+  .search-box .clear-icon { font-size: 15px; color: var(--muted); cursor: pointer; display: none; }
+
   .catalog-header { padding: 16px 16px 4px; }
   .catalog-header h2 { font-size: 22px; font-weight: 800; }
   .catalog-header .count { font-size: 13.5px; color: var(--muted); margin-top: 2px; }
 
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 14px 40px; }
   .card { background: var(--card); border-radius: 16px; overflow: hidden; border: 1px solid var(--line); }
+  .thumb-wrap { position: relative; }
   .thumb { width: 100%; height: 120px; object-fit: cover; background: #EDE4D0; display: block; }
+  .photo-dots {
+    position: absolute; bottom: 6px; left: 0; right: 0;
+    display: flex; justify-content: center; gap: 4px;
+  }
+  .photo-dots .dot {
+    width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.6);
+  }
+  .photo-dots .dot.active { background: #fff; }
+  .photo-count {
+    position: absolute; top: 6px; right: 6px;
+    background: rgba(0,0,0,0.55); color: #fff; font-size: 10px; font-weight: 700;
+    padding: 2px 6px; border-radius: 10px;
+  }
   .card-body { padding: 9px 10px 10px; display: flex; flex-direction: column; gap: 3px; }
   .card-body .name { font-size: 13px; font-weight: 700; line-height: 1.3; }
   .card-body .meta-row { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
@@ -142,6 +169,22 @@
   .big-photo-box img { max-width: 100%; max-height: 220px; border-radius: 12px; display: block; margin: 0 auto; }
   .big-photo-box input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 
+  .photo-slots { display: flex; gap: 10px; }
+  .photo-slot {
+    flex: 1; aspect-ratio: 1; border: 3px dashed var(--gold); border-radius: 16px;
+    background: #FBF3E4; position: relative; display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .photo-slot .cam-emoji { font-size: 30px; color: var(--brown-dark); }
+  .photo-slot .slot-preview { width: 100%; height: 100%; object-fit: cover; }
+  .photo-slot .slot-remove {
+    position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%;
+    background: rgba(0,0,0,0.6); color: #fff; font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; z-index: 2;
+  }
+  .photo-slot .slot-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .photo-slot.filled { border-style: solid; }
+
   .wizard-input {
     border: 2px solid var(--line); border-radius: 14px; padding: 16px 14px;
     font-family: 'Manrope', sans-serif; font-size: 17px; font-weight: 600;
@@ -183,6 +226,14 @@
     <div class="chip" data-cat="🐄 Mol">🐄 Mol</div>
     <div class="chip" data-cat="🐑 Qo'y">🐑 Qo'y</div>
     <div class="chip" data-cat="🐐 Echki">🐐 Echki</div>
+    <div class="chip" data-cat="🐔 Parranda">🐔 Parranda</div>
+    <div class="chip" data-cat="🌾 Yem-hashak">🌾 Yem-hashak</div>
+  </div>
+
+  <div class="search-box" id="searchBox">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="Qidirish (masalan: sigir, tovuq...)">
+    <span class="clear-icon" id="clearSearch">✕</span>
   </div>
 
   <div class="location-banner" id="locationBanner">📍 Joylashuvni yoqib, yaqin e'lonlarni ko'ring</div>
@@ -223,18 +274,34 @@
         <div class="big-cat-btn" data-cat="🐄 Mol"><span class="emoji">🐄</span> Mol / sigir</div>
         <div class="big-cat-btn" data-cat="🐑 Qo'y"><span class="emoji">🐑</span> Qo'y</div>
         <div class="big-cat-btn" data-cat="🐐 Echki"><span class="emoji">🐐</span> Echki</div>
+        <div class="big-cat-btn" data-cat="🐔 Parranda"><span class="emoji">🐔</span> Parranda (tovuq, o'rdak)</div>
+        <div class="big-cat-btn" data-cat="🌾 Yem-hashak"><span class="emoji">🌾</span> Yem-hashak</div>
       </div>
     </div>
 
-    <!-- 2-QADAM: RASM -->
+    <!-- 2-QADAM: RASM(LAR) -->
     <div class="wizard-step" data-step="2">
       <div class="wizard-question">📸 Rasmga oling</div>
-      <div class="wizard-hint">Hayvonni yorug' joyda, yaqindan suratga oling</div>
-      <div class="big-photo-box" id="photoBox">
-        <span class="cam-emoji" id="photoBoxCam">📷</span>
-        <span id="photoBoxText">Bosing va rasmga oling</span>
-        <img id="photoPreview" style="display:none;" alt="">
-        <input type="file" accept="image/*" capture="environment" id="photoInput">
+      <div class="wizard-hint">Kamida 1 ta, xohlasangiz 3 tagacha rasm qo'shishingiz mumkin</div>
+      <div class="photo-slots">
+        <div class="photo-slot" id="slot-0">
+          <span class="cam-emoji">📷</span>
+          <img class="slot-preview" style="display:none;" alt="">
+          <span class="slot-remove" style="display:none;" onclick="removePhoto(0, event)">✕</span>
+          <input type="file" accept="image/*" capture="environment" class="slot-input" data-slot="0">
+        </div>
+        <div class="photo-slot" id="slot-1">
+          <span class="cam-emoji">➕</span>
+          <img class="slot-preview" style="display:none;" alt="">
+          <span class="slot-remove" style="display:none;" onclick="removePhoto(1, event)">✕</span>
+          <input type="file" accept="image/*" capture="environment" class="slot-input" data-slot="1">
+        </div>
+        <div class="photo-slot" id="slot-2">
+          <span class="cam-emoji">➕</span>
+          <img class="slot-preview" style="display:none;" alt="">
+          <span class="slot-remove" style="display:none;" onclick="removePhoto(2, event)">✕</span>
+          <input type="file" accept="image/*" capture="environment" class="slot-input" data-slot="2">
+        </div>
       </div>
       <div class="wizard-nav">
         <button class="wizard-btn-back" onclick="wizardBack()">⬅️</button>
@@ -341,6 +408,7 @@
 
     document.getElementById('chips').style.display = tab === 'catalog' ? 'flex' : 'none';
     document.getElementById('locationBanner').style.display = tab === 'catalog' ? 'flex' : 'none';
+    document.getElementById('searchBox').style.display = tab === 'catalog' ? 'flex' : 'none';
     document.getElementById('catalogHeader').style.display = tab === 'catalog' ? 'block' : 'none';
     document.getElementById('grid').style.display = tab === 'catalog' ? 'grid' : 'none';
 
@@ -352,7 +420,7 @@
 
   // ---------------- E'LON BERISH — BOSQICHMA-BOSQICH ----------------
   let formCategory = null;
-  let formPhotoFile = null;
+  let formPhotoFiles = [null, null, null];
   let formLat = null;
   let formLon = null;
   let currentStep = 1;
@@ -395,22 +463,44 @@
     });
   });
 
-  // 2-qadam: rasm
-  document.getElementById('photoInput').addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    formPhotoFile = file;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      document.getElementById('photoBoxCam').style.display = 'none';
-      document.getElementById('photoBoxText').style.display = 'none';
-      const preview = document.getElementById('photoPreview');
-      preview.src = ev.target.result;
-      preview.style.display = 'block';
-      document.getElementById('nextBtn2').disabled = false;
-    };
-    reader.readAsDataURL(file);
+  // 2-qadam: rasm(lar) — 3 tagacha slot
+  document.querySelectorAll('.slot-input').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const slot = parseInt(e.target.dataset.slot);
+      const file = e.target.files[0];
+      if (!file) return;
+      formPhotoFiles[slot] = file;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const slotEl = document.getElementById(`slot-${slot}`);
+        slotEl.classList.add('filled');
+        slotEl.querySelector('.cam-emoji').style.display = 'none';
+        const preview = slotEl.querySelector('.slot-preview');
+        preview.src = ev.target.result;
+        preview.style.display = 'block';
+        slotEl.querySelector('.slot-remove').style.display = 'flex';
+        checkPhotoStep();
+      };
+      reader.readAsDataURL(file);
+    });
   });
+
+  function removePhoto(slot, event) {
+    event.stopPropagation();
+    formPhotoFiles[slot] = null;
+    const slotEl = document.getElementById(`slot-${slot}`);
+    slotEl.classList.remove('filled');
+    slotEl.querySelector('.cam-emoji').style.display = 'block';
+    slotEl.querySelector('.slot-preview').style.display = 'none';
+    slotEl.querySelector('.slot-remove').style.display = 'none';
+    slotEl.querySelector('.slot-input').value = '';
+    checkPhotoStep();
+  }
+
+  function checkPhotoStep() {
+    // Kamida 1-slot (birinchi rasm) to'ldirilgan bo'lishi shart
+    document.getElementById('nextBtn2').disabled = !formPhotoFiles[0];
+  }
 
   // 3, 4, 5-qadam: matn maydonlari
   document.getElementById('formDesc').addEventListener('input', (e) => {
@@ -444,7 +534,9 @@
 
   // 7-qadam: yakuniy tekshiruv
   function fillSummary() {
-    document.getElementById('summaryPhoto').src = document.getElementById('photoPreview').src;
+    // Birinchi tanlangan rasmni ko'rsatamiz
+    const firstSlotPreview = document.querySelector('#slot-0 .slot-preview');
+    document.getElementById('summaryPhoto').src = firstSlotPreview.src;
     document.getElementById('summaryCat').textContent = formCategory;
     document.getElementById('summaryDesc').textContent = document.getElementById('formDesc').value.trim();
     document.getElementById('summaryPrice').textContent = '💰 ' + document.getElementById('formPrice').value.trim();
@@ -466,7 +558,9 @@
     fd.append('telefon', document.getElementById('formPhone').value.trim());
     fd.append('lat', formLat);
     fd.append('lon', formLon);
-    fd.append('photo', formPhotoFile);
+    formPhotoFiles.forEach(file => {
+      if (file) fd.append('photos', file);
+    });
 
     try {
       const res = await fetch('/api/create-listing', { method: 'POST', body: fd });
@@ -488,17 +582,21 @@
 
   function resetForm() {
     formCategory = null;
-    formPhotoFile = null;
+    formPhotoFiles = [null, null, null];
     formLat = null;
     formLon = null;
     document.querySelectorAll('#formCatRow .big-cat-btn').forEach(o => o.classList.remove('selected'));
     document.getElementById('formDesc').value = '';
     document.getElementById('formPrice').value = '';
     document.getElementById('formPhone').value = '';
-    document.getElementById('photoInput').value = '';
-    document.getElementById('photoBoxCam').style.display = 'block';
-    document.getElementById('photoBoxText').style.display = 'inline';
-    document.getElementById('photoPreview').style.display = 'none';
+    [0, 1, 2].forEach(slot => {
+      const slotEl = document.getElementById(`slot-${slot}`);
+      slotEl.classList.remove('filled');
+      slotEl.querySelector('.cam-emoji').style.display = 'block';
+      slotEl.querySelector('.slot-preview').style.display = 'none';
+      slotEl.querySelector('.slot-remove').style.display = 'none';
+      slotEl.querySelector('.slot-input').value = '';
+    });
     document.getElementById('formMsg').innerHTML = '';
     const locBtn = document.getElementById('formLocationBtn');
     locBtn.textContent = '📍 Bosing — joylashuv aniqlanadi';
@@ -612,11 +710,46 @@
     });
   });
 
+  // ---------------- QIDIRUV ----------------
+  let currentSearch = '';
+  let searchDebounceTimer = null;
+
+  document.getElementById('searchInput').addEventListener('input', (e) => {
+    document.getElementById('clearSearch').style.display = e.target.value ? 'inline' : 'none';
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      currentSearch = e.target.value.trim();
+      loadListings();
+    }, 400);
+  });
+
+  document.getElementById('clearSearch').addEventListener('click', () => {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('clearSearch').style.display = 'none';
+    currentSearch = '';
+    loadListings();
+  });
+
+  // Har bir kartochkaning rasm to'plamini shu yerda saqlaymiz (galereya uchun)
+  const cardPhotoState = {};
+
+  function cyclePhoto(itemId, event) {
+    event.stopPropagation();
+    const state = cardPhotoState[itemId];
+    if (!state || state.urls.length <= 1) return;
+    state.index = (state.index + 1) % state.urls.length;
+    document.getElementById(`thumb-${itemId}`).src = state.urls[state.index];
+    document.querySelectorAll(`#dots-${itemId} .dot`).forEach((d, i) => {
+      d.classList.toggle('active', i === state.index);
+    });
+  }
+
   async function loadListings() {
     const grid = document.getElementById('grid');
     grid.innerHTML = '<div class="loading">Yuklanmoqda...</div>';
 
     let url = `/api/listings?kategoriya=${encodeURIComponent(currentCategory)}`;
+    if (currentSearch) url += `&q=${encodeURIComponent(currentSearch)}`;
     if (userLat !== null && userLon !== null) {
       url += `&lat=${userLat}&lon=${userLon}`;
     }
@@ -628,17 +761,30 @@
       document.getElementById('countLabel').textContent = `${items.length} ta e'lon`;
 
       if (items.length === 0) {
-        grid.innerHTML = '<div class="empty-state">Hozircha e\'lon yo\'q.<br>Botga qaytib, birinchi bo\'lib e\'lon joylang!</div>';
+        grid.innerHTML = '<div class="empty-state">Hech narsa topilmadi.<br>Boshqa so\'z bilan qidirib ko\'ring yoki botga qaytib, birinchi bo\'lib e\'lon joylang!</div>';
         return;
       }
 
       grid.innerHTML = '';
       items.forEach(item => {
         const distanceText = item.distance_km !== null ? `📍 ${item.distance_km} km` : item.kategoriya;
+        const photos = (item.photo_urls && item.photo_urls.length) ? item.photo_urls : [item.photo_url];
+        cardPhotoState[item.id] = { urls: photos, index: 0 };
+
+        const dotsHtml = photos.length > 1
+          ? `<div class="photo-dots" id="dots-${item.id}">` +
+            photos.map((_, i) => `<span class="dot${i === 0 ? ' active' : ''}"></span>`).join('') +
+            `</div>`
+          : '';
+
         const card = document.createElement('div');
         card.className = 'card';
         card.innerHTML = `
-          <img class="thumb" src="${item.photo_url}" alt="${item.tavsif}" loading="lazy">
+          <div class="thumb-wrap" onclick="cyclePhoto(${item.id}, event)">
+            <img class="thumb" id="thumb-${item.id}" src="${photos[0]}" alt="${item.tavsif}" loading="lazy">
+            ${dotsHtml}
+            ${photos.length > 1 ? '<span class="photo-count">📷 ' + photos.length + '</span>' : ''}
+          </div>
           <div class="card-body">
             <div class="name">${item.tavsif}</div>
             <div class="meta-row">
