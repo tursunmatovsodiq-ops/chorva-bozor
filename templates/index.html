@@ -326,6 +326,9 @@
   const currentUserId = tg && tg.initDataUnsafe && tg.initDataUnsafe.user
     ? tg.initDataUnsafe.user.id
     : null;
+  // Bu — Telegram tomonidan RASMAN IMZOLANGAN ma'lumot, server uni tekshiradi.
+  // Faqat ID raqamiga emas, shu imzoga ishonch bildiriladi (xavfsizroq).
+  const tgInitData = tg ? tg.initData : '';
 
   let currentCategory = 'all';
   let userLat = null;
@@ -455,7 +458,8 @@
     btn.textContent = 'Yuborilmoqda...';
 
     const fd = new FormData();
-    fd.append('telegram_id', currentUserId || '');
+    fd.append('init_data', tgInitData);
+    fd.append('user_id', currentUserId || '');
     fd.append('kategoriya', formCategory);
     fd.append('tavsif', document.getElementById('formDesc').value.trim());
     fd.append('narx', document.getElementById('formPrice').value.trim());
@@ -518,7 +522,7 @@
     list.innerHTML = '<div class="loading">Yuklanmoqda...</div>';
 
     try {
-      const res = await fetch(`/api/my-listings?telegram_id=${currentUserId}`);
+      const res = await fetch(`/api/my-listings?init_data=${encodeURIComponent(tgInitData)}&user_id=${currentUserId || ''}`);
       const items = await res.json();
 
       countLabel.textContent = `${items.length} ta e'lon`;
@@ -560,7 +564,7 @@
       await fetch('/api/mark-sold', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, telegram_id: currentUserId }),
+        body: JSON.stringify({ id, init_data: tgInitData, user_id: currentUserId }),
       });
       loadProfile();
     } catch (e) {
@@ -574,7 +578,7 @@
       await fetch('/api/delete-listing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, telegram_id: currentUserId }),
+        body: JSON.stringify({ id, init_data: tgInitData, user_id: currentUserId }),
       });
       loadProfile();
     } catch (e) {
