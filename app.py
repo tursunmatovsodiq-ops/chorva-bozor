@@ -24,6 +24,7 @@ import json
 import hmac
 import hashlib
 import urllib.parse
+import time
 from datetime import datetime
 
 import requests
@@ -510,7 +511,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         [InlineKeyboardButton("🔍 Qidiryapman", callback_data="mode:buy")],
     ]
     if MINI_APP_URL:
-        buttons.append([InlineKeyboardButton("📸 Katalogni ochish", web_app=WebAppInfo(url=MINI_APP_URL))])
+        # Har safar yangi "vaqt belgisi" qo'shiladi — shunda Telegram sahifani
+        # hech qachon eski (keshlangan) holatda ko'rsatmaydi, har doim eng yangisini oladi
+        fresh_url = f"{MINI_APP_URL}?v={int(time.time())}"
+        buttons.append([InlineKeyboardButton("📸 Katalogni ochish", web_app=WebAppInfo(url=fresh_url))])
     keyboard = InlineKeyboardMarkup(buttons)
     text = (
         "Assalomu alaykum! Chorva Bozor botiga xush kelibsiz 🐄🐑🐐\n\n"
