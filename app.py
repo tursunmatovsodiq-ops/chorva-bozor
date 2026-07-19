@@ -81,11 +81,13 @@ CATEGORIES = ["🐄 Mol", "🐑 Qo'y", "🐐 Echki"]
 
 def verify_telegram_init_data(init_data: str):
     if not init_data:
+        logger.warning("initData bo'sh keldi (uzunligi: 0)")
         return None
     try:
         parsed = dict(urllib.parse.parse_qsl(init_data, strict_parsing=True))
         received_hash = parsed.pop("hash", None)
         if not received_hash:
+            logger.warning("initData ichida 'hash' topilmadi. Kalitlar: %s", list(parsed.keys()))
             return None
 
         data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
@@ -93,10 +95,15 @@ def verify_telegram_init_data(init_data: str):
         computed_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
 
         if not hmac.compare_digest(computed_hash, received_hash):
+            logger.warning(
+                "Hash mos kelmadi. Kutilgan(qisqartirilgan)=%s..., Kelgan(qisqartirilgan)=%s..., BOT_TOKEN uzunligi=%d",
+                computed_hash[:10], received_hash[:10], len(BOT_TOKEN),
+            )
             return None
 
         user_json = parsed.get("user")
         if not user_json:
+            logger.warning("initData'da 'user' maydoni topilmadi")
             return None
         user = json.loads(user_json)
         return user  # {"id": ..., "first_name": ..., ...}
