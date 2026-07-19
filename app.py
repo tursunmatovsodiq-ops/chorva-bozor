@@ -339,12 +339,34 @@ STATUS_LABELS = {
 }
 
 
+def resolve_user_id(init_data: str, fallback_user_id: str):
+    """
+    Avval imzolangan initData orqali tekshirishga harakat qiladi (eng xavfsiz).
+    Agar Telegram klienti initData yubormasa (ba'zi eski versiyalarda uchraydi),
+    ehtiyot chorasi sifatida, faqat ID raqamiga ishonib davom etadi.
+    """
+    user = verify_telegram_init_data(init_data)
+    if user:
+        return user["id"], True  # (id, tasdiqlangan_imzo_bilanmi)
+
+    if fallback_user_id:
+        try:
+            uid = int(fallback_user_id)
+            logger.warning("Imzosiz (fallback) autentifikatsiya ishlatildi: user_id=%s", uid)
+            return uid, False
+        except (TypeError, ValueError):
+            pass
+
+    return None, False
+
+
 @flask_app.route("/api/my-listings")
 def api_my_listings():
-    user = verify_telegram_init_data(request.args.get("init_data", ""))
-    if not user:
+    telegram_id, _ = resolve_user_id(
+        request.args.get("init_data", ""), request.args.get("user_id", "")
+    )
+    if not telegram_id:
         return jsonify({"error": "Tasdiqlanmagan so'rov. Mini App'ni Telegram orqali oching."}), 401
-    telegram_id = user["id"]
 
     rows = get_my_listings(telegram_id)
     result = []
@@ -367,10 +389,9 @@ def api_my_listings():
 @flask_app.route("/api/mark-sold", methods=["POST"])
 def api_mark_sold():
     data = request.get_json(force=True)
-    user = verify_telegram_init_data(data.get("init_data", ""))
-    if not user:
+    telegram_id, _ = resolve_user_id(data.get("init_data", ""), data.get("user_id", ""))
+    if not telegram_id:
         return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov"}), 401
-    telegram_id = user["id"]
 
     listing_id = data.get("id")
     if not listing_id:
@@ -382,10 +403,9 @@ def api_mark_sold():
 @flask_app.route("/api/delete-listing", methods=["POST"])
 def api_delete_listing():
     data = request.get_json(force=True)
-    user = verify_telegram_init_data(data.get("init_data", ""))
-    if not user:
+    telegram_id, _ = resolve_user_id(data.get("init_data", ""), data.get("user_id", ""))
+    if not telegram_id:
         return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov"}), 401
-    telegram_id = user["id"]
 
     listing_id = data.get("id")
     if not listing_id:
@@ -397,10 +417,11 @@ def api_delete_listing():
 @flask_app.route("/api/create-listing", methods=["POST"])
 def api_create_listing():
     try:
-        user = verify_telegram_init_data(request.form.get("init_data", ""))
-        if not user:
+        telegram_id, _ = resolve_user_id(
+            request.form.get("init_data", ""), request.form.get("user_id", "")
+        )
+        if not telegram_id:
             return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov. Mini App'ni Telegram orqali oching."}), 401
-        telegram_id = user["id"]
 
         kategoriya = request.form.get("kategoriya", "").strip()
         tavsif = request.form.get("tavsif", "").strip()
