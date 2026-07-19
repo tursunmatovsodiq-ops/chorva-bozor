@@ -765,7 +765,7 @@ def main():
             BUY_CATEGORY: [CallbackQueryHandler(buy_category, pattern="^buycat:")],
             BUY_LOCATION: [MessageHandler(filters.LOCATION, buy_location)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[CommandHandler("cancel", cancel), CommandHandler("start", start)],
     )
 
     app.add_handler(conv_handler)
