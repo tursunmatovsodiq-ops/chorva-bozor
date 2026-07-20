@@ -131,19 +131,25 @@ def init_db():
         )
         """
     )
+    # Migratsiya: agar eski bazada "hudud" ustuni yo'q bo'lsa, uni xavfsiz qo'shamiz
+    # (mavjud ma'lumotlar hech qanday yo'qolmaydi)
+    cur.execute("PRAGMA table_info(listings)")
+    existing_cols = [row[1] for row in cur.fetchall()]
+    if "hudud" not in existing_cols:
+        cur.execute("ALTER TABLE listings ADD COLUMN hudud TEXT DEFAULT ''")
     conn.commit()
     conn.close()
 
 
-def add_listing(telegram_id, kategoriya, tavsif, narx, photo_file_ids, lat, lon, telefon):
+def add_listing(telegram_id, kategoriya, tavsif, narx, photo_file_ids, lat, lon, telefon, hudud=""):
     """photo_file_ids — bitta yoki bir nechta file_id, '|' bilan ajratilgan"""
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute(
         """INSERT INTO listings
-           (telegram_id, kategoriya, tavsif, narx, photo_file_id, lat, lon, telefon, status, sana)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)""",
-        (telegram_id, kategoriya, tavsif, narx, photo_file_ids, lat, lon, telefon, datetime.now().isoformat()),
+           (telegram_id, kategoriya, tavsif, narx, photo_file_id, lat, lon, telefon, hudud, status, sana)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)""",
+        (telegram_id, kategoriya, tavsif, narx, photo_file_ids, lat, lon, telefon, hudud, datetime.now().isoformat()),
     )
     conn.commit()
     listing_id = cur.lastrowid
@@ -179,14 +185,15 @@ def get_listing(listing_id):
 def search_listings(kategoriya=None, search_text=None):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    query = """SELECT id, kategoriya, tavsif, narx, photo_file_id, lat, lon, telefon FROM listings
+    query = """SELECT id, kategoriya, tavsif, narx, photo_file_id, lat, lon, telefon, hudud FROM listings
                WHERE status = 'approved'"""
     params = []
     if kategoriya and kategoriya != "all":
         query += " AND kategoriya = ?"
         params.append(kategoriya)
     if search_text:
-        query += " AND tavsif LIKE ?"
+        query += " AND (tavsif LIKE ? OR hudud LIKE ?)"
+        params.append(f"%{search_text}%")
         params.append(f"%{search_text}%")
     cur.execute(query, params)
     rows = cur.fetchall()
@@ -198,7 +205,7 @@ def get_my_listings(telegram_id):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute(
-        """SELECT id, kategoriya, tavsif, narx, photo_file_id, status, sana FROM listings
+        """SELECT id, kategoriya, tavsif, narx, photo_file_id, status, sana, hudud FROM listings
            WHERE telegram_id = ? ORDER BY id DESC""",
         (telegram_id,),
     )
@@ -279,7 +286,7 @@ def api_listings():
     rows = search_listings(kategoriya, search_text if search_text else None)
 
     result = []
-    for id_, kat, tavsif, narx, photo_file_id, item_lat, item_lon, telefon in rows:
+    for id_, kat, tavsif, narx, photo_file_id, item_lat, item_lon, telefon, hudud in rows:
         dist = None
         if lat is not None and lon is not None and item_lat is not None and item_lon is not None:
             dist = round(distance_km(lat, lon, item_lat, item_lon), 1)
@@ -296,6 +303,7 @@ def api_listings():
                 "distance_km": dist,
                 "lat": item_lat,
                 "lon": item_lon,
+                "hudud": hudud or "",
             }
         )
 
@@ -362,7 +370,7 @@ def api_my_listings():
 
     rows = get_my_listings(telegram_id)
     result = []
-    for id_, kat, tavsif, narx, photo_file_id, status, sana in rows:
+    for id_, kat, tavsif, narx, photo_file_id, status, sana, hudud in rows:
         photo_urls = photo_ids_to_urls(photo_file_id)
         result.append(
             {
@@ -375,6 +383,7 @@ def api_my_listings():
                 "status": status,
                 "status_label": STATUS_LABELS.get(status, status),
                 "sana": sana,
+                "hudud": hudud or "",
             }
         )
     return jsonify(result)
@@ -421,6 +430,7 @@ def api_create_listing():
         tavsif = request.form.get("tavsif", "").strip()
         narx = request.form.get("narx", "").strip()
         telefon = request.form.get("telefon", "").strip()
+        hudud = request.form.get("hudud", "").strip()
         lat = float(request.form.get("lat"))
         lon = float(request.form.get("lon"))
         photos = request.files.getlist("photos")[:3]  # eng ko'pi bilan 3 ta rasm
@@ -429,11 +439,11 @@ def api_create_listing():
             return jsonify({"success": False, "error": "Barcha maydonlarni to'ldiring"}), 400
 
         # Avval bo'sh rasm bilan yozuvni yaratamiz (id olish uchun)
-        listing_id = add_listing(telegram_id, kategoriya, tavsif, narx, "", lat, lon, telefon)
+        listing_id = add_listing(telegram_id, kategoriya, tavsif, narx, "", lat, lon, telefon, hudud)
 
         admin_caption = (
             f"🆕 Yangi e'lon (Mini App orqali, ID: {listing_id}):\n\n"
-            f"Turi: {kategoriya}\nTavsif: {tavsif}\nNarx: {narx}\nTelefon: {telefon}"
+            f"Turi: {kategoriya}\nHudud: {hudud}\nTavsif: {tavsif}\nNarx: {narx}\nTelefon: {telefon}"
         )
         admin_keyboard = {
             "inline_keyboard": [
@@ -475,7 +485,7 @@ def api_create_listing():
                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
                 data={
                     "chat_id": telegram_id,
-                    "text": "Rahmat! E'loningiz admin tomonidan tekshirilmoqda.",
+                    "text": "Rahmat! 🙌 E'loningiz admin tomonidan tez orada ko'rib chiqiladi.",
                 },
                 timeout=10,
             )
@@ -515,9 +525,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         keyboard = None
 
     text = (
-        "Assalomu alaykum! 🐄🐑🐐\n\n"
-        "Chorva Bozor — mol, qo'y, echki, parranda va yem-hashak "
-        "sotish/sotib olish uchun ilova.\n\n"
+        "Assalomu alaykum! 👋🐄🐑🐐\n\n"
+        "Chorva Bozorga xush kelibsiz — mol, qo'y, echki, parranda va "
+        "yem-hashak sotish yoki topish endi bir necha tugma ichida!\n\n"
         "Boshlash uchun pastdagi tugmani bosing 👇"
     )
     if update.message:
@@ -544,14 +554,14 @@ async def admin_decision(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         set_listing_status(listing_id, "approved")
         await query.message.reply_text(f"✅ Tasdiqlandi: {tavsif}")
         try:
-            await context.bot.send_message(chat_id=telegram_id, text="🎉 E'loningiz tasdiqlandi!")
+            await context.bot.send_message(chat_id=telegram_id, text="🎉 Ajoyib! E'loningiz tasdiqlandi va endi katalogda ko'rinadi.")
         except Exception as e:
             logger.warning("Xabar yuborishda xatolik: %s", e)
     else:
         set_listing_status(listing_id, "rejected")
         await query.message.reply_text(f"❌ Rad etildi: {tavsif}")
         try:
-            await context.bot.send_message(chat_id=telegram_id, text="Afsuski, e'loningiz rad etildi.")
+            await context.bot.send_message(chat_id=telegram_id, text="Afsuski, e'loningiz hozircha tasdiqlanmadi. Savol bo'lsa, admin bilan bog'laning.")
         except Exception as e:
             logger.warning("Xabar yuborishda xatolik: %s", e)
 
