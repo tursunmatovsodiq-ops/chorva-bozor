@@ -79,7 +79,7 @@
   .card-body { padding: 9px 10px 10px; display: flex; flex-direction: column; gap: 3px; }
   .card-body .name { font-size: 13px; font-weight: 700; line-height: 1.3; }
   .card-body .meta-row { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
-  .region-tag { font-size: 10px; font-weight: 600; color: var(--brown-dark); background: #F0E4D0; padding: 3px 7px; border-radius: 8px; }
+  .region-tag { font-size: 10px; font-weight: 600; color: var(--brown-dark); background: #F0E4D0; padding: 3px 7px; border-radius: 8px; max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .price { font-size: 13px; font-weight: 800; }
   .btn-row { display: flex; gap: 6px; margin-top: 10px; }
   .call-btn {
@@ -90,13 +90,43 @@
   }
   .nav-btn {
     flex: 1;
-    background: var(--gold); color: var(--ink); border: none;
+    background: #2E7D6B; color: white; border: none;
     border-radius: 10px; padding: 11px 0; font-size: 13px; font-weight: 800;
-    text-align: center; text-decoration: none; display: block;
+    text-align: center; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 4px;
   }
 
   .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 14.5px; line-height: 1.7; }
   .loading { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 14.5px; }
+
+  /* Rasmni kattalashtirib ko'rsatuvchi lightbox */
+  .lightbox {
+    position: fixed; inset: 0; background: rgba(10,10,10,0.94);
+    display: none; align-items: center; justify-content: center;
+    z-index: 1000; flex-direction: column;
+  }
+  .lightbox.open { display: flex; }
+  .lightbox img {
+    max-width: 92vw; max-height: 72vh; border-radius: 10px; object-fit: contain;
+  }
+  .lightbox-close {
+    position: absolute; top: 18px; right: 18px; color: #fff; font-size: 26px;
+    width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.15); border-radius: 50%;
+  }
+  .lightbox-arrow {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    color: #fff; font-size: 30px; width: 46px; height: 46px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.15); border-radius: 50%;
+  }
+  .lightbox-arrow.prev { left: 12px; }
+  .lightbox-arrow.next { right: 12px; }
+  .lightbox-hint {
+    color: rgba(255,255,255,0.75); font-size: 12.5px; margin-top: 14px; text-align: center;
+  }
+  .lightbox-counter {
+    color: rgba(255,255,255,0.9); font-size: 13px; font-weight: 700; margin-top: 10px;
+  }
 
   /* Pastki tab navigatsiyasi */
   .bottom-nav {
@@ -191,6 +221,10 @@
     background: var(--card); color: var(--ink); width: 100%;
   }
   textarea.wizard-input { resize: vertical; min-height: 90px; }
+  select.wizard-input:disabled { opacity: 0.5; }
+
+  .form-group-simple { display: flex; flex-direction: column; gap: 6px; }
+  .form-group-simple label { font-size: 13.5px; font-weight: 700; color: var(--muted); }
 
   .big-location-btn {
     border: 2px solid var(--gold); background: #FBF3E4; color: var(--brown-dark);
@@ -265,6 +299,7 @@
       <div class="wizard-dot" data-step="5"></div>
       <div class="wizard-dot" data-step="6"></div>
       <div class="wizard-dot" data-step="7"></div>
+      <div class="wizard-dot" data-step="8"></div>
     </div>
 
     <!-- 1-QADAM: TURI -->
@@ -279,8 +314,30 @@
       </div>
     </div>
 
-    <!-- 2-QADAM: RASM(LAR) -->
+    <!-- 2-QADAM: HUDUD (VILOYAT + TUMAN) -->
     <div class="wizard-step" data-step="2">
+      <div class="wizard-question">📍 Qaysi hududdansiz?</div>
+      <div class="wizard-hint">Xaridorlar shu orqali sizni tezroq topadi</div>
+      <div class="form-group-simple">
+        <label>Viloyat</label>
+        <select class="wizard-input" id="formViloyat">
+          <option value="">— Tanlang —</option>
+        </select>
+      </div>
+      <div class="form-group-simple">
+        <label>Tuman / shahar</label>
+        <select class="wizard-input" id="formTuman" disabled>
+          <option value="">— Avval viloyatni tanlang —</option>
+        </select>
+      </div>
+      <div class="wizard-nav">
+        <button class="wizard-btn-back" onclick="wizardBack()">⬅️</button>
+        <button class="wizard-btn-next" id="nextBtn2" onclick="wizardNext()" disabled>Keyingi ➜</button>
+      </div>
+    </div>
+
+    <!-- 3-QADAM: RASM(LAR) -->
+    <div class="wizard-step" data-step="3">
       <div class="wizard-question">📸 Rasmga oling</div>
       <div class="wizard-hint">Kamida 1 ta, xohlasangiz 3 tagacha rasm qo'shishingiz mumkin</div>
       <div class="photo-slots">
@@ -305,61 +362,62 @@
       </div>
       <div class="wizard-nav">
         <button class="wizard-btn-back" onclick="wizardBack()">⬅️</button>
-        <button class="wizard-btn-next" id="nextBtn2" onclick="wizardNext()" disabled>Keyingi ➜</button>
-      </div>
-    </div>
-
-    <!-- 3-QADAM: TAVSIF -->
-    <div class="wizard-step" data-step="3">
-      <div class="wizard-question">✍️ Yoshi va holati qanday?</div>
-      <div class="wizard-hint">Masalan: "3 yoshli qorabayir sigir, sog'in"</div>
-      <textarea class="wizard-input" id="formDesc" placeholder="Shu yerga yozing..."></textarea>
-      <div class="wizard-nav">
-        <button class="wizard-btn-back" onclick="wizardBack()">⬅️</button>
         <button class="wizard-btn-next" id="nextBtn3" onclick="wizardNext()" disabled>Keyingi ➜</button>
       </div>
     </div>
 
-    <!-- 4-QADAM: NARX -->
+    <!-- 4-QADAM: TAVSIF -->
     <div class="wizard-step" data-step="4">
-      <div class="wizard-question">💰 Narxi qancha?</div>
-      <div class="wizard-hint">Masalan: "14 mln so'm" yoki "kelishiladi"</div>
-      <input type="text" class="wizard-input" id="formPrice" placeholder="Narxni yozing...">
+      <div class="wizard-question" id="descQuestion">✍️ Yoshi va holati qanday?</div>
+      <div class="wizard-hint" id="descHint">Masalan: "3 yoshli qorabayir sigir, sog'in"</div>
+      <textarea class="wizard-input" id="formDesc" placeholder="Shu yerga yozing..."></textarea>
       <div class="wizard-nav">
         <button class="wizard-btn-back" onclick="wizardBack()">⬅️</button>
         <button class="wizard-btn-next" id="nextBtn4" onclick="wizardNext()" disabled>Keyingi ➜</button>
       </div>
     </div>
 
-    <!-- 5-QADAM: TELEFON -->
+    <!-- 5-QADAM: NARX -->
     <div class="wizard-step" data-step="5">
-      <div class="wizard-question">📞 Telefon raqamingiz?</div>
-      <div class="wizard-hint">Xaridorlar shu raqamga qo'ng'iroq qiladi</div>
-      <input type="tel" class="wizard-input" id="formPhone" placeholder="+998 90 123 45 67">
+      <div class="wizard-question">💰 Narxi qancha?</div>
+      <div class="wizard-hint" id="priceHint">Masalan: "14 mln so'm" yoki "kelishiladi"</div>
+      <input type="text" class="wizard-input" id="formPrice" placeholder="Narxni yozing...">
       <div class="wizard-nav">
         <button class="wizard-btn-back" onclick="wizardBack()">⬅️</button>
         <button class="wizard-btn-next" id="nextBtn5" onclick="wizardNext()" disabled>Keyingi ➜</button>
       </div>
     </div>
 
-    <!-- 6-QADAM: JOYLASHUV -->
+    <!-- 6-QADAM: TELEFON -->
     <div class="wizard-step" data-step="6">
-      <div class="wizard-question">📍 Qayerdasiz?</div>
-      <div class="wizard-hint">Xaridorlar sizgacha bo'lgan masofani ko'rishi uchun</div>
-      <div class="big-location-btn" id="formLocationBtn">📍 Bosing — joylashuv aniqlanadi</div>
+      <div class="wizard-question">📞 Telefon raqamingiz?</div>
+      <div class="wizard-hint">Xaridorlar shu raqamga qo'ng'iroq qiladi</div>
+      <input type="tel" class="wizard-input" id="formPhone" placeholder="+998 90 123 45 67">
       <div class="wizard-nav">
         <button class="wizard-btn-back" onclick="wizardBack()">⬅️</button>
         <button class="wizard-btn-next" id="nextBtn6" onclick="wizardNext()" disabled>Keyingi ➜</button>
       </div>
     </div>
 
-    <!-- 7-QADAM: TASDIQLASH -->
+    <!-- 7-QADAM: ANIQ JOYLASHUV (GPS) -->
     <div class="wizard-step" data-step="7">
+      <div class="wizard-question">🎯 Aniq joyingiz</div>
+      <div class="wizard-hint">Xaridorlarga masofa va yo'nalishni ko'rsatish uchun</div>
+      <div class="big-location-btn" id="formLocationBtn">📍 Bosing — joylashuv aniqlanadi</div>
+      <div class="wizard-nav">
+        <button class="wizard-btn-back" onclick="wizardBack()">⬅️</button>
+        <button class="wizard-btn-next" id="nextBtn7" onclick="wizardNext()" disabled>Keyingi ➜</button>
+      </div>
+    </div>
+
+    <!-- 8-QADAM: TASDIQLASH -->
+    <div class="wizard-step" data-step="8">
       <div class="wizard-question">✅ Tekshirib ko'ring</div>
       <div class="summary-box">
         <img id="summaryPhoto" src="" alt="">
         <div class="summary-lines">
           <b id="summaryCat"></b>
+          <span id="summaryHudud"></span>
           <span id="summaryDesc"></span>
           <span id="summaryPrice"></span>
           <span id="summaryPhone"></span>
@@ -384,6 +442,16 @@
     <button class="nav-btn-tab" id="tabProfile" onclick="switchTab('profile')">
       <span class="icon">👤</span>Profil
     </button>
+  </div>
+
+  <!-- RASMNI KATTALASHTIRIB KO'RSATUVCHI OYNA -->
+  <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+    <span class="lightbox-close" onclick="closeLightbox()">✕</span>
+    <span class="lightbox-arrow prev" onclick="lightboxPrev(event)">‹</span>
+    <img id="lightboxImg" src="" alt="" onclick="event.stopPropagation()">
+    <span class="lightbox-arrow next" onclick="lightboxNext(event)">›</span>
+    <div class="lightbox-counter" id="lightboxCounter"></div>
+    <div class="lightbox-hint">Saqlash uchun rasmni uzoq bosib turing</div>
   </div>
 
 <script>
@@ -420,11 +488,108 @@
 
   // ---------------- E'LON BERISH — BOSQICHMA-BOSQICH ----------------
   let formCategory = null;
+  let formHudud = '';
   let formPhotoFiles = [null, null, null];
   let formLat = null;
   let formLon = null;
   let currentStep = 1;
-  const TOTAL_STEPS = 7;
+  const TOTAL_STEPS = 8;
+
+  // Har bir viloyatning tumanlari
+  const REGIONS = {
+    "Toshkent shahri": ["Toshkent shahri"],
+    "Toshkent viloyati": ["Bekobod", "Bo'ka", "Bo'stonliq", "Chinoz", "Qibray", "Ohangaron", "Oqqo'rg'on", "Parkent", "Piskent", "Quyichirchiq", "Toshkent tumani", "Yangiyo'l", "Zangiota", "Yuqorichirchiq"],
+    "Andijon": ["Andijon shahri", "Asaka", "Baliqchi", "Bo'z", "Buloqboshi", "Izboskan", "Jalaquduq", "Xo'jaobod", "Qo'rg'ontepa", "Marhamat", "Oltinko'l", "Paxtaobod", "Shahrixon", "Ulug'nor", "Xonobod"],
+    "Farg'ona": ["Farg'ona shahri", "Marg'ilon", "Qo'qon", "Beshariq", "Bog'dod", "Buvayda", "Dang'ara", "Furqat", "Yozyovon", "Oltiariq", "Rishton", "So'x", "Toshloq", "Uchko'prik", "Quva"],
+    "Namangan": ["Namangan shahri", "Chortoq", "Chust", "Kosonsoy", "Mingbuloq", "Namangan tumani", "Norin", "Pop", "To'raqo'rg'on", "Uychi", "Uchqo'rg'on", "Yangiqo'rg'on"],
+    "Samarqand": ["Samarqand shahri", "Bulung'ur", "Ishtixon", "Jomboy", "Kattaqo'rg'on", "Narpay", "Nurobod", "Oqdaryo", "Payariq", "Pastdarg'om", "Paxtachi", "Qo'shrabot", "Tayloq", "Urgut"],
+    "Buxoro": ["Buxoro shahri", "G'ijduvon", "Jondor", "Kogon", "Olot", "Peshku", "Qorako'l", "Qorovulbozor", "Romitan", "Shofirkon", "Vobkent"],
+    "Xorazm": ["Urganch shahri", "Bog'ot", "Gurlan", "Xazorasp", "Xonqa", "Qo'shko'pir", "Shovot", "Urganch tumani", "Yangibozor", "Yangiariq"],
+    "Navoiy": ["Navoiy shahri", "Konimex", "Karmana", "Navbahor", "Nurota", "Qiziltepa", "Tomdi", "Uchquduq", "Xatirchi"],
+    "Qashqadaryo": ["Qarshi shahri", "G'uzor", "Dehqonobod", "Kasbi", "Kitob", "Koson", "Mirishkor", "Muborak", "Nishon", "Qamashi", "Shahrisabz", "Yakkabog'", "Chiroqchi"],
+    "Surxondaryo": ["Termiz shahri", "Angor", "Bandixon", "Boysun", "Denov", "Jarqo'rg'on", "Muzrabot", "Oltinsoy", "Qiziriq", "Qumqo'rg'on", "Sariosiyo", "Sherobod", "Sho'rchi", "Uzun"],
+    "Jizzax": ["Jizzax shahri", "Arnasoy", "Baxmal", "Do'stlik", "Forish", "G'allaorol", "Mirzacho'l", "Paxtakor", "Yangiobod", "Zafarobod", "Zarbdor", "Zomin"],
+    "Sirdaryo": ["Guliston shahri", "Boyovut", "Guliston tumani", "Mirzaobod", "Oqoltin", "Sardoba", "Sayxunobod", "Xovos", "Yangiyer"],
+    "Qoraqalpog'iston": ["Nukus shahri", "Amudaryo", "Beruniy", "Chimboy", "Ellikqal'a", "Kegeyli", "Mo'ynoq", "Nukus tumani", "Qanliko'l", "Qo'ng'irot", "Qorao'zak", "Shumanay", "Taxtako'pir", "To'rtko'l", "Xo'jayli"],
+  };
+
+  function populateViloyatSelect() {
+    const sel = document.getElementById('formViloyat');
+    Object.keys(REGIONS).forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      sel.appendChild(opt);
+    });
+  }
+  populateViloyatSelect();
+
+  document.getElementById('formViloyat').addEventListener('change', (e) => {
+    const tumanSel = document.getElementById('formTuman');
+    tumanSel.innerHTML = '<option value="">— Tanlang —</option>';
+    const viloyat = e.target.value;
+    if (viloyat && REGIONS[viloyat]) {
+      tumanSel.disabled = false;
+      REGIONS[viloyat].forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        tumanSel.appendChild(opt);
+      });
+    } else {
+      tumanSel.disabled = true;
+    }
+    document.getElementById('nextBtn2').disabled = true;
+  });
+
+  document.getElementById('formTuman').addEventListener('change', (e) => {
+    const viloyat = document.getElementById('formViloyat').value;
+    const tuman = e.target.value;
+    if (viloyat && tuman) {
+      formHudud = (tuman === viloyat) ? viloyat : `${tuman}, ${viloyat}`;
+      document.getElementById('nextBtn2').disabled = false;
+    } else {
+      formHudud = '';
+      document.getElementById('nextBtn2').disabled = true;
+    }
+  });
+
+  // Har bir toifa uchun moslashtirilgan savol va namuna matnlar
+  const CATEGORY_QUESTIONS = {
+    "🐄 Mol": {
+      desc_q: "✍️ Yoshi, zoti va holati qanday?",
+      desc_hint: 'Masalan: "3 yoshli qorabayir sigir, sog\'in"',
+      price_hint: 'Masalan: "14 mln so\'m"',
+    },
+    "🐑 Qo'y": {
+      desc_q: "✍️ Yoshi va holati qanday?",
+      desc_hint: 'Masalan: "8 oylik qo\'zi, boquvdan chiqqan"',
+      price_hint: 'Masalan: "3.2 mln so\'m"',
+    },
+    "🐐 Echki": {
+      desc_q: "✍️ Yoshi va holati qanday?",
+      desc_hint: 'Masalan: "2 yoshli, sernasl echki"',
+      price_hint: 'Masalan: "1.8 mln so\'m"',
+    },
+    "🐔 Parranda": {
+      desc_q: "✍️ Nechta, qanday yosh va turdagi?",
+      desc_hint: 'Masalan: "20 ta tovuq, 3 oylik, tuxum beradigan"',
+      price_hint: 'Masalan: "35 ming so\'m/dona"',
+    },
+    "🌾 Yem-hashak": {
+      desc_q: "✍️ Turi va miqdori qancha?",
+      desc_hint: 'Masalan: "Bug\'doy somoni, quruq, 500 kg"',
+      price_hint: 'Masalan: "1500 so\'m/kg"',
+    },
+  };
+
+  function updateCategoryQuestions() {
+    const q = CATEGORY_QUESTIONS[formCategory];
+    if (!q) return;
+    document.getElementById('descQuestion').textContent = q.desc_q;
+    document.getElementById('descHint').textContent = q.desc_hint;
+    document.getElementById('priceHint').textContent = q.price_hint;
+  }
 
   function updateProgress() {
     document.querySelectorAll('.wizard-dot').forEach(dot => {
@@ -438,7 +603,7 @@
     });
     currentStep = step;
     updateProgress();
-    if (step === 7) fillSummary();
+    if (step === 8) fillSummary();
   }
 
   function wizardNext() {
@@ -459,6 +624,7 @@
       document.querySelectorAll('#formCatRow .big-cat-btn').forEach(o => o.classList.remove('selected'));
       opt.classList.add('selected');
       formCategory = opt.dataset.cat;
+      updateCategoryQuestions();
       setTimeout(() => wizardNext(), 200);
     });
   });
@@ -499,21 +665,21 @@
 
   function checkPhotoStep() {
     // Kamida 1-slot (birinchi rasm) to'ldirilgan bo'lishi shart
-    document.getElementById('nextBtn2').disabled = !formPhotoFiles[0];
+    document.getElementById('nextBtn3').disabled = !formPhotoFiles[0];
   }
 
-  // 3, 4, 5-qadam: matn maydonlari
+  // 4, 5, 6-qadam: matn maydonlari
   document.getElementById('formDesc').addEventListener('input', (e) => {
-    document.getElementById('nextBtn3').disabled = e.target.value.trim().length === 0;
-  });
-  document.getElementById('formPrice').addEventListener('input', (e) => {
     document.getElementById('nextBtn4').disabled = e.target.value.trim().length === 0;
   });
-  document.getElementById('formPhone').addEventListener('input', (e) => {
+  document.getElementById('formPrice').addEventListener('input', (e) => {
     document.getElementById('nextBtn5').disabled = e.target.value.trim().length === 0;
   });
+  document.getElementById('formPhone').addEventListener('input', (e) => {
+    document.getElementById('nextBtn6').disabled = e.target.value.trim().length === 0;
+  });
 
-  // 6-qadam: joylashuv
+  // 7-qadam: aniq joylashuv (GPS)
   document.getElementById('formLocationBtn').addEventListener('click', () => {
     if (!navigator.geolocation) return;
     document.getElementById('formLocationBtn').textContent = '📍 Aniqlanmoqda...';
@@ -524,7 +690,7 @@
         const btn = document.getElementById('formLocationBtn');
         btn.textContent = '✅ Joylashuv aniqlandi!';
         btn.classList.add('confirmed');
-        document.getElementById('nextBtn6').disabled = false;
+        document.getElementById('nextBtn7').disabled = false;
       },
       () => {
         document.getElementById('formLocationBtn').textContent = '❌ Ruxsat berilmadi — qayta bosing';
@@ -538,6 +704,7 @@
     const firstSlotPreview = document.querySelector('#slot-0 .slot-preview');
     document.getElementById('summaryPhoto').src = firstSlotPreview.src;
     document.getElementById('summaryCat').textContent = formCategory;
+    document.getElementById('summaryHudud').textContent = '📍 ' + formHudud;
     document.getElementById('summaryDesc').textContent = document.getElementById('formDesc').value.trim();
     document.getElementById('summaryPrice').textContent = '💰 ' + document.getElementById('formPrice').value.trim();
     document.getElementById('summaryPhone').textContent = '📞 ' + document.getElementById('formPhone').value.trim();
@@ -553,6 +720,7 @@
     fd.append('init_data', tgInitData);
     fd.append('user_id', currentUserId || '');
     fd.append('kategoriya', formCategory);
+    fd.append('hudud', formHudud);
     fd.append('tavsif', document.getElementById('formDesc').value.trim());
     fd.append('narx', document.getElementById('formPrice').value.trim());
     fd.append('telefon', document.getElementById('formPhone').value.trim());
@@ -566,7 +734,7 @@
       const res = await fetch('/api/create-listing', { method: 'POST', body: fd });
       const result = await res.json();
       if (result.success) {
-        msgBox.innerHTML = '<div class="form-msg success">✅ E\'loningiz yuborildi! Admin tekshirgach, katalogda chiqadi.</div>';
+        msgBox.innerHTML = '<div class="form-msg success">🎉 Ajoyib! E\'loningiz yuborildi — admin tez orada ko\'rib chiqadi va katalogda ko\'rina boshlaydi.</div>';
         btn.textContent = '🚀 E\'lonni yuborish';
         setTimeout(() => { resetForm(); switchTab('profile'); }, 1800);
         return;
@@ -582,10 +750,14 @@
 
   function resetForm() {
     formCategory = null;
+    formHudud = '';
     formPhotoFiles = [null, null, null];
     formLat = null;
     formLon = null;
     document.querySelectorAll('#formCatRow .big-cat-btn').forEach(o => o.classList.remove('selected'));
+    document.getElementById('formViloyat').value = '';
+    document.getElementById('formTuman').innerHTML = '<option value="">— Avval viloyatni tanlang —</option>';
+    document.getElementById('formTuman').disabled = true;
     document.getElementById('formDesc').value = '';
     document.getElementById('formPrice').value = '';
     document.getElementById('formPhone').value = '';
@@ -601,7 +773,7 @@
     const locBtn = document.getElementById('formLocationBtn');
     locBtn.textContent = '📍 Bosing — joylashuv aniqlanadi';
     locBtn.classList.remove('confirmed');
-    ['nextBtn2','nextBtn3','nextBtn4','nextBtn5','nextBtn6'].forEach(id => {
+    ['nextBtn2','nextBtn3','nextBtn4','nextBtn5','nextBtn6','nextBtn7'].forEach(id => {
       document.getElementById(id).disabled = true;
     });
     showStep(1);
@@ -613,7 +785,7 @@
 
     if (!currentUserId) {
       countLabel.textContent = '';
-      list.innerHTML = '<div class="empty-state">Profilni ko\'rish uchun Mini App\'ni Telegram orqali oching.</div>';
+      list.innerHTML = '<div class="empty-state">Profilingizni ko\'rish uchun ilovani Telegram orqali oching 🙂</div>';
       return;
     }
 
@@ -626,7 +798,7 @@
       countLabel.textContent = `${items.length} ta e'lon`;
 
       if (items.length === 0) {
-        list.innerHTML = '<div class="empty-state">Hali e\'lon joylamagansiz.<br>Botga qaytib, birinchi e\'loningizni qo\'shing!</div>';
+        list.innerHTML = '<div class="empty-state">Hali birorta ham e\'lon joylamagansiz 🙂<br>Pastdagi "E\'lon berish" tugmasini bosib, birinchisini qo\'shing!</div>';
         return;
       }
 
@@ -639,6 +811,7 @@
           <img class="profile-thumb" src="${item.photo_url}" alt="">
           <div class="profile-info">
             <div class="p-name">${item.tavsif}</div>
+            ${item.hudud ? `<div class="p-price">📍 ${item.hudud}</div>` : ''}
             <div class="p-price">${item.narx}</div>
             <span class="status-pill ${item.status}">${item.status_label}</span>
             ${showActions ? `
@@ -652,7 +825,7 @@
         list.appendChild(card);
       });
     } catch (e) {
-      list.innerHTML = '<div class="empty-state">Xatolik yuz berdi.</div>';
+      list.innerHTML = '<div class="empty-state">Birortasi noto\'g\'ri ketdi 😕 Qayta urinib ko\'ring.</div>';
     }
   }
 
@@ -732,16 +905,52 @@
 
   // Har bir kartochkaning rasm to'plamini shu yerda saqlaymiz (galereya uchun)
   const cardPhotoState = {};
+  let lightboxCurrentId = null;
 
-  function cyclePhoto(itemId, event) {
-    event.stopPropagation();
+  function openLightbox(itemId, event) {
+    if (event) event.stopPropagation();
     const state = cardPhotoState[itemId];
-    if (!state || state.urls.length <= 1) return;
-    state.index = (state.index + 1) % state.urls.length;
-    document.getElementById(`thumb-${itemId}`).src = state.urls[state.index];
-    document.querySelectorAll(`#dots-${itemId} .dot`).forEach((d, i) => {
-      d.classList.toggle('active', i === state.index);
+    if (!state) return;
+    lightboxCurrentId = itemId;
+    document.getElementById('lightbox').classList.add('open');
+    renderLightbox();
+  }
+
+  function renderLightbox() {
+    const state = cardPhotoState[lightboxCurrentId];
+    document.getElementById('lightboxImg').src = state.urls[state.index];
+    document.getElementById('lightboxCounter').textContent =
+      state.urls.length > 1 ? `${state.index + 1} / ${state.urls.length}` : '';
+    document.querySelectorAll('.lightbox-arrow').forEach(a => {
+      a.style.display = state.urls.length > 1 ? 'flex' : 'none';
     });
+  }
+
+  function lightboxNext(event) {
+    if (event) event.stopPropagation();
+    const state = cardPhotoState[lightboxCurrentId];
+    state.index = (state.index + 1) % state.urls.length;
+    renderLightbox();
+  }
+
+  function lightboxPrev(event) {
+    if (event) event.stopPropagation();
+    const state = cardPhotoState[lightboxCurrentId];
+    state.index = (state.index - 1 + state.urls.length) % state.urls.length;
+    renderLightbox();
+  }
+
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('open');
+    // Kartochkadagi asosiy rasmni ham shu indeksga moslashtiramiz
+    const state = cardPhotoState[lightboxCurrentId];
+    if (state) {
+      const thumb = document.getElementById(`thumb-${lightboxCurrentId}`);
+      if (thumb) thumb.src = state.urls[state.index];
+      document.querySelectorAll(`#dots-${lightboxCurrentId} .dot`).forEach((d, i) => {
+        d.classList.toggle('active', i === state.index);
+      });
+    }
   }
 
   async function loadListings() {
@@ -761,13 +970,20 @@
       document.getElementById('countLabel').textContent = `${items.length} ta e'lon`;
 
       if (items.length === 0) {
-        grid.innerHTML = '<div class="empty-state">Hech narsa topilmadi.<br>Boshqa so\'z bilan qidirib ko\'ring yoki botga qaytib, birinchi bo\'lib e\'lon joylang!</div>';
+        grid.innerHTML = '<div class="empty-state">Hozircha hech narsa topilmadi 🔍<br>Boshqa so\'z bilan qidiring, yoki birinchi bo\'lib o\'zingiz e\'lon joylang!</div>';
         return;
       }
 
       grid.innerHTML = '';
       items.forEach(item => {
-        const distanceText = item.distance_km !== null ? `📍 ${item.distance_km} km` : item.kategoriya;
+        let locationText = item.kategoriya;
+        if (item.hudud && item.distance_km !== null) {
+          locationText = `📍 ${item.hudud} • ${item.distance_km} km`;
+        } else if (item.hudud) {
+          locationText = `📍 ${item.hudud}`;
+        } else if (item.distance_km !== null) {
+          locationText = `📍 ${item.distance_km} km`;
+        }
         const photos = (item.photo_urls && item.photo_urls.length) ? item.photo_urls : [item.photo_url];
         cardPhotoState[item.id] = { urls: photos, index: 0 };
 
@@ -780,7 +996,7 @@
         const card = document.createElement('div');
         card.className = 'card';
         card.innerHTML = `
-          <div class="thumb-wrap" onclick="cyclePhoto(${item.id}, event)">
+          <div class="thumb-wrap" onclick="openLightbox(${item.id}, event)">
             <img class="thumb" id="thumb-${item.id}" src="${photos[0]}" alt="${item.tavsif}" loading="lazy">
             ${dotsHtml}
             ${photos.length > 1 ? '<span class="photo-count">📷 ' + photos.length + '</span>' : ''}
@@ -788,19 +1004,19 @@
           <div class="card-body">
             <div class="name">${item.tavsif}</div>
             <div class="meta-row">
-              <span class="region-tag">${distanceText}</span>
+              <span class="region-tag">${locationText}</span>
               <span class="price">${item.narx}</span>
             </div>
             <div class="btn-row">
               <a class="call-btn" href="tel:${item.telefon}">📞 Qo'ng'iroq</a>
-              <a class="nav-btn" href="https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lon}" target="_blank">🗺️ Yo'nalish</a>
+              <a class="nav-btn" href="https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lon}" target="_blank">🧭 Yo'nalish</a>
             </div>
           </div>
         `;
         grid.appendChild(card);
       });
     } catch (e) {
-      grid.innerHTML = '<div class="empty-state">Xatolik yuz berdi. Qayta urinib ko\'ring.</div>';
+      grid.innerHTML = '<div class="empty-state">Birortasi noto\'g\'ri ketdi 😕 Qayta urinib ko\'ring.</div>';
     }
   }
 
