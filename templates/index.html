@@ -9,15 +9,17 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --ink: #2B1D14;
-    --brown: #8B5A2B;
-    --brown-dark: #6B4420;
-    --gold: #D9A441;
-    --gold-dark: #B8842A;
-    --paper: #FBF7F0;
+    --ink: #1E2A22;
+    --brown: #2E7D4F;
+    --brown-dark: #1F5C38;
+    --blue: #2E6FED;
+    --blue-dark: #1E56C4;
+    --gold: #E8B23D;
+    --gold-dark: #C4941F;
+    --paper: #F7FAF6;
     --card: #FFFFFF;
-    --line: #EAE0D0;
-    --muted: #8A7A6A;
+    --line: #E3EDE3;
+    --muted: #7A8A7D;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -26,14 +28,70 @@
     color: var(--ink);
     font-size: 15px;
   }
-  .chips { display: flex; gap: 8px; padding: 12px 14px 4px; overflow-x: auto; }
-  .chip {
-    flex-shrink: 0; padding: 10px 18px; border-radius: 22px;
-    font-size: 14.5px; font-weight: 700; white-space: nowrap;
-    border: 1.5px solid var(--line); color: var(--ink); background: var(--card);
-    cursor: pointer;
+  /* Yuqori sarlavha */
+  .app-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 16px 8px;
   }
-  .chip.active { background: var(--brown); border-color: var(--brown); color: white; }
+  .app-logo {
+    width: 42px; height: 42px; border-radius: 50%;
+    background: #E4F3E8; display: flex; align-items: center; justify-content: center;
+    font-size: 22px; flex-shrink: 0;
+  }
+  .app-header-text { flex: 1; min-width: 0; }
+  .app-title { font-size: 18px; font-weight: 800; color: var(--ink); }
+  .app-subtitle { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+  .app-bell { font-size: 20px; color: var(--muted); flex-shrink: 0; }
+
+  /* Reklama banneri */
+  .hero-banner {
+    margin: 6px 16px 0;
+    background: linear-gradient(135deg, var(--brown-dark), var(--brown));
+    border-radius: 20px; padding: 20px 18px;
+    display: flex; align-items: center; justify-content: space-between;
+    overflow: hidden; position: relative;
+  }
+  .hero-text { flex: 1; z-index: 1; }
+  .hero-title { color: #fff; font-size: 19px; font-weight: 800; line-height: 1.25; }
+  .hero-subtitle { color: rgba(255,255,255,0.85); font-size: 12.5px; margin-top: 6px; margin-bottom: 14px; }
+  .hero-cta {
+    background: var(--gold); color: #2B1D0A; border: none; border-radius: 12px;
+    padding: 10px 14px; font-size: 12.5px; font-weight: 800; font-family: 'Manrope', sans-serif;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .hero-emoji {
+    font-size: 30px; line-height: 1.3; text-align: right; opacity: 0.85;
+    writing-mode: vertical-rl; flex-shrink: 0; margin-left: 6px;
+  }
+
+  /* Bo'lim sarlavhalari (Kategoriyalar / E'lonlar) */
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 16px 0;
+  }
+  .section-header h3 { font-size: 16px; font-weight: 800; color: var(--ink); }
+  .section-header .see-all { font-size: 12px; font-weight: 700; color: var(--brown); }
+
+  .chips { display: flex; gap: 14px; padding: 12px 16px 4px; overflow-x: auto; }
+  .chip {
+    flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 6px;
+    width: 62px; cursor: pointer;
+  }
+  .chip .circle {
+    width: 58px; height: 58px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; border: 2.5px solid transparent;
+    box-shadow: inset 0 -6px 10px rgba(0,0,0,0.14), inset 0 2px 4px rgba(255,255,255,0.5);
+  }
+  .circle-all   { background: linear-gradient(150deg, #EAF4EC, #C9DECB); }
+  .circle-mol   { background: linear-gradient(150deg, #D8B27C, #8B5A2B); }
+  .circle-qoy   { background: linear-gradient(150deg, #F7F3E8, #D6CCB8); }
+  .circle-echki { background: linear-gradient(150deg, #CBC0A8, #8A7A5F); }
+  .circle-parranda { background: linear-gradient(150deg, #F6C578, #E0692F); }
+  .circle-yem   { background: linear-gradient(150deg, #EBDA9C, #C89B24); }
+  .chip .label { font-size: 10.5px; font-weight: 700; color: var(--ink); text-align: center; }
+  .chip.active .circle { border-color: var(--brown); }
+  .chip.active .label { color: var(--brown); }
 
   .location-banner {
     margin: 10px 14px 0;
@@ -71,16 +129,26 @@
     width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.6);
   }
   .photo-dots .dot.active { background: #fff; }
+  .cat-badge {
+    position: absolute; top: 8px; left: 8px; z-index: 1;
+    background: var(--brown); color: #fff; font-size: 10px; font-weight: 800;
+    padding: 4px 9px; border-radius: 20px;
+  }
+  .share-badge {
+    position: absolute; top: 6px; right: 6px; z-index: 2;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: rgba(255,255,255,0.92); color: var(--brown-dark);
+    display: flex; align-items: center; justify-content: center; font-size: 13px;
+  }
   .photo-count {
-    position: absolute; top: 6px; right: 6px;
+    position: absolute; bottom: 6px; right: 6px;
     background: rgba(0,0,0,0.55); color: #fff; font-size: 10px; font-weight: 700;
     padding: 2px 6px; border-radius: 10px;
   }
   .card-body { padding: 9px 10px 10px; display: flex; flex-direction: column; gap: 3px; }
   .card-body .name { font-size: 13px; font-weight: 700; line-height: 1.3; }
-  .card-body .meta-row { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
-  .region-tag { font-size: 10px; font-weight: 600; color: var(--brown-dark); background: #F0E4D0; padding: 3px 7px; border-radius: 8px; max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .price { font-size: 13px; font-weight: 800; }
+  .price { font-size: 15px; font-weight: 800; color: var(--brown-dark); margin-top: 2px; }
+  .location-line { font-size: 11px; color: var(--muted); font-weight: 600; }
   .btn-row { display: flex; gap: 6px; margin-top: 10px; }
   .call-btn {
     flex: 1;
@@ -90,7 +158,7 @@
   }
   .nav-btn {
     flex: 1;
-    background: #2E7D6B; color: white; border: none;
+    background: var(--blue); color: white; border: none;
     border-radius: 10px; padding: 11px 0; font-size: 13px; font-weight: 800;
     text-align: center; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 4px;
   }
@@ -255,13 +323,24 @@
 </head>
 <body>
 
-  <div class="chips" id="chips">
-    <div class="chip active" data-cat="all">Barchasi</div>
-    <div class="chip" data-cat="🐄 Mol">🐄 Mol</div>
-    <div class="chip" data-cat="🐑 Qo'y">🐑 Qo'y</div>
-    <div class="chip" data-cat="🐐 Echki">🐐 Echki</div>
-    <div class="chip" data-cat="🐔 Parranda">🐔 Parranda</div>
-    <div class="chip" data-cat="🌾 Yem-hashak">🌾 Yem-hashak</div>
+  <!-- YUQORI SARLAVHA (doim ko'rinadi) -->
+  <div class="app-header">
+    <div class="app-logo">🐄</div>
+    <div class="app-header-text">
+      <div class="app-title">Chorva Bozor</div>
+      <div class="app-subtitle">Yem-hashak va chorva mahsulotlari</div>
+    </div>
+    <div class="app-bell">🔔</div>
+  </div>
+
+  <!-- REKLAMA BANNERI -->
+  <div class="hero-banner" id="heroBanner">
+    <div class="hero-text">
+      <div class="hero-title">Mol • Qo'y • Echki<br>Parranda</div>
+      <div class="hero-subtitle">Yem-hashak va chorvani oson toping!</div>
+      <button class="hero-cta" onclick="switchTab('create')">➕ E'lon joylashtirish — bepul!</button>
+    </div>
+    <div class="hero-emoji">🐄🐑🐔</div>
   </div>
 
   <div class="search-box" id="searchBox">
@@ -272,8 +351,22 @@
 
   <div class="location-banner" id="locationBanner">📍 Joylashuvni yoqib, yaqin e'lonlarni ko'ring</div>
 
+  <div class="section-header" id="categorySectionHeader">
+    <h3>Kategoriyalar</h3>
+    <span class="see-all" onclick="resetFilters()">Barchasini ko'rish</span>
+  </div>
+
+  <div class="chips" id="chips">
+    <div class="chip active" data-cat="all"><span class="circle circle-all">🏠</span><span class="label">Barchasi</span></div>
+    <div class="chip" data-cat="🐄 Mol"><span class="circle circle-mol">🐄</span><span class="label">Mol</span></div>
+    <div class="chip" data-cat="🐑 Qo'y"><span class="circle circle-qoy">🐑</span><span class="label">Qo'y</span></div>
+    <div class="chip" data-cat="🐐 Echki"><span class="circle circle-echki">🐐</span><span class="label">Echki</span></div>
+    <div class="chip" data-cat="🐔 Parranda"><span class="circle circle-parranda">🐔</span><span class="label">Parranda</span></div>
+    <div class="chip" data-cat="🌾 Yem-hashak"><span class="circle circle-yem">🌾</span><span class="label">Yem-hashak</span></div>
+  </div>
+
   <div class="catalog-header" id="catalogHeader">
-    <h2>Mahsulotlar</h2>
+    <h2>Tavsiya etilgan e'lonlar</h2>
     <div class="count" id="countLabel">Yuklanmoqda...</div>
   </div>
 
@@ -434,7 +527,7 @@
 
   <div class="bottom-nav">
     <button class="nav-btn-tab active" id="tabCatalog" onclick="switchTab('catalog')">
-      <span class="icon">🐄</span>Katalog
+      <span class="icon">🏠</span>Katalog
     </button>
     <button class="nav-btn-tab" id="tabCreate" onclick="switchTab('create')">
       <span class="icon">➕</span>E'lon berish
@@ -465,6 +558,44 @@
   // Faqat ID raqamiga emas, shu imzoga ishonch bildiriladi (xavfsizroq).
   const tgInitData = tg ? tg.initData : '';
 
+  // Server orqali uzatilgan sozlamalar (botni ulashish uchun)
+  const BOT_USERNAME = {{ bot_username|tojson }};
+  const MINI_APP_URL_BASE = {{ mini_app_url|tojson }};
+
+  function shareApp() {
+    const shareLink = BOT_USERNAME ? `https://t.me/${BOT_USERNAME}` : MINI_APP_URL_BASE;
+    const shareText = 'Chorva Bozor — mol, qo\'y, echki, parranda va yem-hashak sotish/sotib olish uchun ilova 🐄🐑🐐';
+    if (tg && tg.openTelegramLink) {
+      const url = `https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(shareText)}`;
+      tg.openTelegramLink(url);
+    } else if (navigator.share) {
+      navigator.share({ title: 'Chorva Bozor', text: shareText, url: shareLink });
+    } else {
+      navigator.clipboard.writeText(`${shareText}\n${shareLink}`);
+      alert('Havola nusxalandi! Endi uni istalgan joyga joylashtirsangiz bo\'ladi.');
+    }
+  }
+
+  // Har bir kartochkaning matn ma'lumotlari (ulashish uchun)
+  const cardDataState = {};
+
+  function shareListing(itemId, event) {
+    if (event) event.stopPropagation();
+    const data = cardDataState[itemId];
+    if (!data) return;
+    const shareLink = BOT_USERNAME ? `https://t.me/${BOT_USERNAME}` : MINI_APP_URL_BASE;
+    const shareText = `${data.tavsif}\n💰 ${data.narx}\n📞 ${data.telefon}\n\nChorva Bozorda ko'ring 👇`;
+    if (tg && tg.openTelegramLink) {
+      const url = `https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(shareText)}`;
+      tg.openTelegramLink(url);
+    } else if (navigator.share) {
+      navigator.share({ title: data.tavsif, text: shareText, url: shareLink });
+    } else {
+      navigator.clipboard.writeText(`${shareText}\n${shareLink}`);
+      alert('Ma\'lumot nusxalandi! Endi uni istalgan joyga joylashtirsangiz bo\'ladi.');
+    }
+  }
+
   let currentCategory = 'all';
   let userLat = null;
   let userLon = null;
@@ -474,6 +605,8 @@
     document.getElementById('tabCreate').classList.toggle('active', tab === 'create');
     document.getElementById('tabProfile').classList.toggle('active', tab === 'profile');
 
+    document.getElementById('heroBanner').style.display = tab === 'catalog' ? 'flex' : 'none';
+    document.getElementById('categorySectionHeader').style.display = tab === 'catalog' ? 'flex' : 'none';
     document.getElementById('chips').style.display = tab === 'catalog' ? 'flex' : 'none';
     document.getElementById('locationBanner').style.display = tab === 'catalog' ? 'flex' : 'none';
     document.getElementById('searchBox').style.display = tab === 'catalog' ? 'flex' : 'none';
@@ -484,6 +617,16 @@
     document.getElementById('profileView').style.display = tab === 'profile' ? 'block' : 'none';
 
     if (tab === 'profile') loadProfile();
+  }
+
+  function resetFilters() {
+    currentCategory = 'all';
+    currentSearch = '';
+    document.getElementById('searchInput').value = '';
+    document.getElementById('clearSearch').style.display = 'none';
+    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    document.querySelector('.chip[data-cat="all"]').classList.add('active');
+    loadListings();
   }
 
   // ---------------- E'LON BERISH — BOSQICHMA-BOSQICH ----------------
@@ -993,20 +1136,23 @@
             `</div>`
           : '';
 
+        const catLabel = item.kategoriya.split(' ').slice(1).join(' ') || item.kategoriya;
+        cardDataState[item.id] = { tavsif: item.tavsif, narx: item.narx, telefon: item.telefon };
+
         const card = document.createElement('div');
         card.className = 'card';
         card.innerHTML = `
           <div class="thumb-wrap" onclick="openLightbox(${item.id}, event)">
+            <span class="cat-badge">${catLabel}</span>
+            <span class="share-badge" onclick="shareListing(${item.id}, event)">🔗</span>
             <img class="thumb" id="thumb-${item.id}" src="${photos[0]}" alt="${item.tavsif}" loading="lazy">
             ${dotsHtml}
             ${photos.length > 1 ? '<span class="photo-count">📷 ' + photos.length + '</span>' : ''}
           </div>
           <div class="card-body">
             <div class="name">${item.tavsif}</div>
-            <div class="meta-row">
-              <span class="region-tag">${locationText}</span>
-              <span class="price">${item.narx}</span>
-            </div>
+            <div class="price">${item.narx}</div>
+            <div class="location-line">${locationText}</div>
             <div class="btn-row">
               <a class="call-btn" href="tel:${item.telefon}">📞 Qo'ng'iroq</a>
               <a class="nav-btn" href="https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lon}" target="_blank">🧭 Yo'nalish</a>
