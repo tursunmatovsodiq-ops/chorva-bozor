@@ -241,6 +241,20 @@ def delete_own_listing(listing_id, telegram_id):
     return affected > 0
 
 
+def update_own_listing(listing_id, telegram_id, tavsif, narx, telefon, hudud):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        """UPDATE listings SET tavsif = ?, narx = ?, telefon = ?, hudud = ?
+           WHERE id = ? AND telegram_id = ?""",
+        (tavsif, narx, telefon, hudud, listing_id, telegram_id),
+    )
+    affected = cur.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
 def photo_ids_to_urls(photo_file_id_field):
     """'id1|id2|id3' -> ['/photo/id1', '/photo/id2', '/photo/id3']"""
     if not photo_file_id_field:
@@ -420,6 +434,26 @@ def api_delete_listing():
     return jsonify({"success": success})
 
 
+@flask_app.route("/api/update-listing", methods=["POST"])
+def api_update_listing():
+    data = request.get_json(force=True)
+    telegram_id, _ = resolve_user_id(data.get("init_data", ""), data.get("user_id", ""))
+    if not telegram_id:
+        return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov"}), 401
+
+    listing_id = data.get("id")
+    tavsif = (data.get("tavsif") or "").strip()
+    narx = (data.get("narx") or "").strip()
+    telefon = (data.get("telefon") or "").strip()
+    hudud = (data.get("hudud") or "").strip()
+
+    if not listing_id or not all([tavsif, narx, telefon]):
+        return jsonify({"success": False, "error": "Barcha maydonlarni to'ldiring"}), 400
+
+    success = update_own_listing(listing_id, telegram_id, tavsif, narx, telefon, hudud)
+    return jsonify({"success": success})
+
+
 @flask_app.route("/api/create-listing", methods=["POST"])
 def api_create_listing():
     try:
@@ -578,7 +612,9 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 # ---------------------------------------------------------------------------
 
 def run_flask():
-    flask_app.run(host="0.0.0.0", port=PORT)
+    # threaded=True — bir vaqtning o'zida bir nechta odam kirsa ham, server
+    # ularni birma-bir emas, parallel ishlaydi (tezlik sezilarli oshadi)
+    flask_app.run(host="0.0.0.0", port=PORT, threaded=True)
 
 
 async def post_init(application: Application) -> None:
