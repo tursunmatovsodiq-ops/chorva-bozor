@@ -50,6 +50,7 @@ from telegram.ext import (
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "SIZNING_BOT_TOKENINGIZ_BU_YERGA")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
 MINI_APP_URL = os.environ.get("MINI_APP_URL", "")
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "")  # masalan: chorva_bozor_bot ("@" belgisisiz)
 PORT = int(os.environ.get("PORT", "8000"))
 
 # DB_DIR — Railway'da "Volume" (doimiy xotira) ulanganda shu yerga yozing (masalan /data)
@@ -269,7 +270,9 @@ flask_app = Flask(__name__)
 
 @flask_app.route("/")
 def index():
-    resp = flask_app.make_response(render_template("index.html"))
+    resp = flask_app.make_response(
+        render_template("index.html", bot_username=BOT_USERNAME, mini_app_url=MINI_APP_URL)
+    )
     # Telegram Mini App sahifani keshlab qo'ymasligi uchun — har doim eng yangi versiyani olib turadi
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     resp.headers["Pragma"] = "no-cache"
