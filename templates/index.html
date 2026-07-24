@@ -230,12 +230,33 @@
   .status-pill.approved { background: #DDEEE0; color: #3F7A4F; }
   .status-pill.rejected { background: #F5DADA; color: #A33; }
   .status-pill.sold { background: #E0E0E0; color: #666; }
-  .profile-actions { display: flex; gap: 6px; margin-top: 6px; }
+  .profile-actions { display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap; }
   .profile-actions button {
-    font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 8px; border: none; cursor: pointer;
+    font-size: 10.5px; font-weight: 700; padding: 6px 8px; border-radius: 8px; border: none; cursor: pointer;
   }
   .btn-sold { background: var(--gold); color: var(--ink); }
   .btn-delete { background: #F5DADA; color: #A33; }
+  .btn-edit { background: #DDE8F5; color: #2E5FA3; }
+
+  /* E'lonni tahrirlash oynasi */
+  .edit-modal {
+    position: fixed; inset: 0; background: rgba(10,10,10,0.55);
+    display: none; align-items: flex-end; z-index: 1000;
+  }
+  .edit-modal.open { display: flex; }
+  .edit-sheet {
+    background: var(--paper); border-radius: 20px 20px 0 0;
+    width: 100%; max-height: 85vh; overflow-y: auto;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .edit-sheet-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 18px; border-bottom: 1px solid var(--line);
+  }
+  .edit-sheet-title { font-size: 16px; font-weight: 800; color: var(--ink); }
+  .edit-close { font-size: 18px; color: var(--muted); padding: 4px; }
+  .edit-sheet-body { padding: 16px 18px 22px; display: flex; flex-direction: column; gap: 14px; }
+
 
   /* E'lon berish — bosqichma-bosqich (wizard) */
   .wizard-progress { display: flex; gap: 6px; padding: 16px 16px 4px; }
@@ -545,6 +566,36 @@
     <span class="lightbox-arrow next" onclick="lightboxNext(event)">›</span>
     <div class="lightbox-counter" id="lightboxCounter"></div>
     <div class="lightbox-hint">Saqlash uchun rasmni uzoq bosib turing</div>
+  </div>
+
+  <!-- E'LONNI TAHRIRLASH OYNASI -->
+  <div class="edit-modal" id="editModal" onclick="closeEditModal()">
+    <div class="edit-sheet" onclick="event.stopPropagation()">
+      <div class="edit-sheet-header">
+        <div class="edit-sheet-title">✏️ E'lonni tahrirlash</div>
+        <span class="edit-close" onclick="closeEditModal()">✕</span>
+      </div>
+      <div class="edit-sheet-body">
+        <div class="form-group-simple">
+          <label>Tavsif</label>
+          <textarea class="wizard-input" id="editTavsif"></textarea>
+        </div>
+        <div class="form-group-simple">
+          <label>Narx</label>
+          <input type="text" class="wizard-input" id="editNarx">
+        </div>
+        <div class="form-group-simple">
+          <label>Telefon</label>
+          <input type="tel" class="wizard-input" id="editTelefon">
+        </div>
+        <div class="form-group-simple">
+          <label>Hudud</label>
+          <input type="text" class="wizard-input" id="editHudud" placeholder="Masalan: Marg'ilon, Farg'ona">
+        </div>
+        <div id="editMsg"></div>
+        <button class="wizard-btn-next" id="editSaveBtn" onclick="saveEdit()">💾 Saqlash</button>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -922,6 +973,8 @@
     showStep(1);
   }
 
+  const profileDataState = {};
+
   async function loadProfile() {
     const list = document.getElementById('profileList');
     const countLabel = document.getElementById('profileCount');
@@ -947,9 +1000,10 @@
 
       list.innerHTML = '';
       items.forEach(item => {
+        profileDataState[item.id] = item;
         const card = document.createElement('div');
         card.className = 'profile-card';
-        const showActions = item.status === 'approved';
+        const showActions = item.status !== 'sold';
         card.innerHTML = `
           <img class="profile-thumb" src="${item.photo_url}" alt="">
           <div class="profile-info">
@@ -959,7 +1013,8 @@
             <span class="status-pill ${item.status}">${item.status_label}</span>
             ${showActions ? `
               <div class="profile-actions">
-                <button class="btn-sold" onclick="markSold(${item.id})">✅ Sotildi</button>
+                <button class="btn-edit" onclick="openEditModal(${item.id})">✏️ Tahrirlash</button>
+                ${item.status === 'approved' ? `<button class="btn-sold" onclick="markSold(${item.id})">✅ Sotildi</button>` : ''}
                 <button class="btn-delete" onclick="deleteListing(${item.id})">🗑️ O'chirish</button>
               </div>
             ` : ''}
@@ -998,6 +1053,65 @@
     } catch (e) {
       alert('Xatolik yuz berdi.');
     }
+  }
+
+  // ---------------- E'LONNI TAHRIRLASH ----------------
+  let editingId = null;
+
+  function openEditModal(id) {
+    const item = profileDataState[id];
+    if (!item) return;
+    editingId = id;
+    document.getElementById('editTavsif').value = item.tavsif || '';
+    document.getElementById('editNarx').value = item.narx || '';
+    document.getElementById('editTelefon').value = item.telefon || '';
+    document.getElementById('editHudud').value = item.hudud || '';
+    document.getElementById('editMsg').innerHTML = '';
+    document.getElementById('editModal').classList.add('open');
+  }
+
+  function closeEditModal() {
+    document.getElementById('editModal').classList.remove('open');
+    editingId = null;
+  }
+
+  async function saveEdit() {
+    const msgBox = document.getElementById('editMsg');
+    const btn = document.getElementById('editSaveBtn');
+    const tavsif = document.getElementById('editTavsif').value.trim();
+    const narx = document.getElementById('editNarx').value.trim();
+    const telefon = document.getElementById('editTelefon').value.trim();
+    const hudud = document.getElementById('editHudud').value.trim();
+
+    if (!tavsif || !narx || !telefon) {
+      msgBox.innerHTML = '<div class="form-msg error">Tavsif, narx va telefon to\'ldirilishi shart.</div>';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Saqlanmoqda...';
+
+    try {
+      const res = await fetch('/api/update-listing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingId, init_data: tgInitData, user_id: currentUserId,
+          tavsif, narx, telefon, hudud,
+        }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        closeEditModal();
+        loadProfile();
+      } else {
+        msgBox.innerHTML = `<div class="form-msg error">Xatolik: ${result.error || 'saqlanmadi'}</div>`;
+      }
+    } catch (e) {
+      msgBox.innerHTML = '<div class="form-msg error">Internet xatoligi. Qayta urinib ko\'ring.</div>';
+    }
+    btn.disabled = false;
+    btn.textContent = '💾 Saqlash';
   }
 
   function requestLocation() {
