@@ -138,6 +138,8 @@ def init_db():
     existing_cols = [row[1] for row in cur.fetchall()]
     if "hudud" not in existing_cols:
         cur.execute("ALTER TABLE listings ADD COLUMN hudud TEXT DEFAULT ''")
+    if "views" not in existing_cols:
+        cur.execute("ALTER TABLE listings ADD COLUMN views INTEGER DEFAULT 0")
     conn.commit()
     conn.close()
 
@@ -186,7 +188,7 @@ def get_listing(listing_id):
 def search_listings(kategoriya=None, search_text=None):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    query = """SELECT id, kategoriya, tavsif, narx, photo_file_id, lat, lon, telefon, hudud FROM listings
+    query = """SELECT id, kategoriya, tavsif, narx, photo_file_id, lat, lon, telefon, hudud, views FROM listings
                WHERE status = 'approved'"""
     params = []
     if kategoriya and kategoriya != "all":
@@ -206,13 +208,23 @@ def get_my_listings(telegram_id):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute(
-        """SELECT id, kategoriya, tavsif, narx, photo_file_id, status, sana, hudud FROM listings
+        """SELECT id, kategoriya, tavsif, narx, photo_file_id, status, sana, hudud, views FROM listings
            WHERE telegram_id = ? ORDER BY id DESC""",
         (telegram_id,),
     )
     rows = cur.fetchall()
     conn.close()
     return rows
+
+
+def increment_views(listing_id):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("UPDATE listings SET views = views + 1 WHERE id = ? AND status = 'approved'", (listing_id,))
+    affected = cur.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
 
 
 def mark_as_sold(listing_id, telegram_id):
@@ -303,7 +315,7 @@ def api_listings():
     rows = search_listings(kategoriya, search_text if search_text else None)
 
     result = []
-    for id_, kat, tavsif, narx, photo_file_id, item_lat, item_lon, telefon, hudud in rows:
+    for id_, kat, tavsif, narx, photo_file_id, item_lat, item_lon, telefon, hudud, views in rows:
         dist = None
         if lat is not None and lon is not None and item_lat is not None and item_lon is not None:
             dist = round(distance_km(lat, lon, item_lat, item_lon), 1)
@@ -321,6 +333,7 @@ def api_listings():
                 "lat": item_lat,
                 "lon": item_lon,
                 "hudud": hudud or "",
+                "views": views or 0,
             }
         )
 
@@ -387,7 +400,7 @@ def api_my_listings():
 
     rows = get_my_listings(telegram_id)
     result = []
-    for id_, kat, tavsif, narx, photo_file_id, status, sana, hudud in rows:
+    for id_, kat, tavsif, narx, photo_file_id, status, sana, hudud, views in rows:
         photo_urls = photo_ids_to_urls(photo_file_id)
         result.append(
             {
@@ -401,6 +414,7 @@ def api_my_listings():
                 "status_label": STATUS_LABELS.get(status, status),
                 "sana": sana,
                 "hudud": hudud or "",
+                "views": views or 0,
             }
         )
     return jsonify(result)
@@ -452,6 +466,17 @@ def api_update_listing():
 
     success = update_own_listing(listing_id, telegram_id, tavsif, narx, telefon, hudud)
     return jsonify({"success": success})
+
+
+@flask_app.route("/api/view-listing", methods=["POST"])
+def api_view_listing():
+    # Ko'rishlar sonini oshirish uchun autentifikatsiya shart emas — ochiq amal
+    data = request.get_json(force=True)
+    listing_id = data.get("id")
+    if not listing_id:
+        return jsonify({"success": False}), 400
+    increment_views(listing_id)
+    return jsonify({"success": True})
 
 
 @flask_app.route("/api/create-listing", methods=["POST"])
