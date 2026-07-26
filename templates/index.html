@@ -134,13 +134,6 @@
     background: var(--brown); color: #fff; font-size: 10px; font-weight: 800;
     padding: 4px 9px; border-radius: 20px;
   }
-  .share-badge {
-    position: absolute; top: 8px; right: 8px; z-index: 2;
-    width: 36px; height: 36px; border-radius: 50%;
-    background: rgba(255,255,255,0.96); color: var(--brown-dark);
-    display: flex; align-items: center; justify-content: center; font-size: 18px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-  }
   .photo-count {
     position: absolute; bottom: 6px; right: 6px;
     background: rgba(0,0,0,0.55); color: #fff; font-size: 10px; font-weight: 700;
@@ -163,6 +156,12 @@
     background: var(--blue); color: white; border: none;
     border-radius: 10px; padding: 11px 0; font-size: 13px; font-weight: 800;
     text-align: center; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 4px;
+  }
+  .share-btn {
+    flex: 0 0 42px;
+    background: #EEF3EE; color: var(--brown-dark); border: 1.5px solid var(--line);
+    border-radius: 10px; font-size: 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
   }
 
   .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 14.5px; line-height: 1.7; }
@@ -616,8 +615,8 @@
   const MINI_APP_URL_BASE = {{ mini_app_url|tojson }};
 
   function shareApp() {
-    const shareLink = BOT_USERNAME ? `https://t.me/${BOT_USERNAME}` : MINI_APP_URL_BASE;
-    const shareText = 'Chorva Bozor — mol, qo\'y, echki, parranda va yem-hashak sotish/sotib olish uchun ilova 🐄🐑🐐';
+    const shareLink = BOT_USERNAME ? `https://t.me/${BOT_USERNAME}?start=share` : MINI_APP_URL_BASE;
+    const shareText = '🐄🐑🐔 Chorva Bozor — mol, qo\'y, echki, parranda va yem-hashak sotish/sotib olish uchun ilova.\n\nChorva Bozor orqali soting yoki xarid qiling!';
     if (tg && tg.openTelegramLink) {
       const url = `https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(shareText)}`;
       tg.openTelegramLink(url);
@@ -636,8 +635,8 @@
     if (event) event.stopPropagation();
     const data = cardDataState[itemId];
     if (!data) return;
-    const shareLink = BOT_USERNAME ? `https://t.me/${BOT_USERNAME}` : MINI_APP_URL_BASE;
-    const shareText = `${data.tavsif}\n💰 ${data.narx}\n📞 ${data.telefon}\n\nChorva Bozorda ko'ring 👇`;
+    const shareLink = BOT_USERNAME ? `https://t.me/${BOT_USERNAME}?start=share` : MINI_APP_URL_BASE;
+    const shareText = `${data.tavsif}\n💰 ${data.narx}\n📞 ${data.telefon}\n\nChorva Bozor orqali soting yoki xarid qiling 🐄👇`;
     if (tg && tg.openTelegramLink) {
       const url = `https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(shareText)}`;
       tg.openTelegramLink(url);
@@ -1268,7 +1267,6 @@
         card.innerHTML = `
           <div class="thumb-wrap" onclick="openLightbox(${item.id}, event)">
             <span class="cat-badge">${catLabel}</span>
-            <span class="share-badge" onclick="shareListing(${item.id}, event)">🔗</span>
             <img class="thumb" id="thumb-${item.id}" src="${photos[0]}" alt="${item.tavsif}" loading="lazy">
             ${dotsHtml}
             ${photos.length > 1 ? '<span class="photo-count">📷 ' + photos.length + '</span>' : ''}
@@ -1281,6 +1279,7 @@
             <div class="btn-row">
               <a class="call-btn" href="tel:${item.telefon}">📞 Qo'ng'iroq</a>
               <a class="nav-btn" href="https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lon}" target="_blank">🧭 Yo'nalish</a>
+              <button class="share-btn" onclick="shareListing(${item.id}, event)">🔗</button>
             </div>
           </div>
         `;
