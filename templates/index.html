@@ -158,10 +158,11 @@
     text-align: center; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 4px;
   }
   .share-btn {
-    flex: 0 0 42px;
+    width: 100%; margin-top: 6px;
     background: #EEF3EE; color: var(--brown-dark); border: 1.5px solid var(--line);
-    border-radius: 10px; font-size: 16px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
+    border-radius: 10px; padding: 9px 0; font-size: 12px; font-weight: 800; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+    font-family: 'Manrope', sans-serif;
   }
 
   .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 14.5px; line-height: 1.7; }
@@ -1279,8 +1280,8 @@
             <div class="btn-row">
               <a class="call-btn" href="tel:${item.telefon}">📞 Qo'ng'iroq</a>
               <a class="nav-btn" href="https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lon}" target="_blank">🧭 Yo'nalish</a>
-              <button class="share-btn" onclick="shareListing(${item.id}, event)">🔗</button>
             </div>
+            <button class="share-btn" onclick="shareListing(${item.id}, event)">🔗 Ulashish</button>
           </div>
         `;
         grid.appendChild(card);
