@@ -164,6 +164,13 @@
     display: flex; align-items: center; justify-content: center; gap: 5px;
     font-family: 'Manrope', sans-serif;
   }
+  .interest-btn {
+    width: 100%; margin-top: 6px;
+    background: #FBEAEE; color: #B33A5B; border: 1.5px solid #F2CBD5;
+    border-radius: 10px; padding: 9px 0; font-size: 12px; font-weight: 800; cursor: pointer;
+    font-family: 'Manrope', sans-serif;
+  }
+  .interest-btn.active { background: #B33A5B; color: #fff; border-color: #B33A5B; }
 
   .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 14.5px; line-height: 1.7; }
   .loading { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 14.5px; }
@@ -239,6 +246,37 @@
   .btn-sold { background: var(--gold); color: var(--ink); }
   .btn-delete { background: #F5DADA; color: #A33; }
   .btn-edit { background: #DDE8F5; color: #2E5FA3; }
+  .btn-interests { background: #F0E4D0; color: var(--brown-dark); }
+  .interest-line { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+
+  /* Foydalanuvchi profili sarlavha kartochkasi */
+  .my-profile-card {
+    margin: 14px 16px 4px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    padding: 14px; display: flex; align-items: center; gap: 12px;
+  }
+  .my-profile-avatar {
+    width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0;
+    background: #EEF6EF; display: flex; align-items: center; justify-content: center;
+    font-size: 24px; overflow: hidden;
+  }
+  .my-profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .my-profile-info { flex: 1; min-width: 0; }
+  .my-profile-name { font-size: 14.5px; font-weight: 800; color: var(--ink); }
+  .my-profile-hudud { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .my-profile-edit {
+    width: 38px; height: 38px; border-radius: 50%; border: 1.5px solid var(--line);
+    background: var(--paper); font-size: 16px; flex-shrink: 0; cursor: pointer;
+  }
+
+  .avatar-slot {
+    width: 92px; height: 92px; border-radius: 50%; margin: 0 auto;
+    border: 3px dashed var(--gold); background: #FBF3E4; position: relative;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  .avatar-slot .cam-emoji { font-size: 26px; }
+  .avatar-slot .slot-preview { width: 100%; height: 100%; object-fit: cover; }
+  .avatar-slot input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 
   /* E'lonni tahrirlash oynasi */
   .edit-modal {
@@ -397,8 +435,17 @@
 
   <!-- PROFIL SAHIFASI -->
   <div id="profileView" style="display:none;">
+    <div class="my-profile-card" id="myProfileCard">
+      <div class="my-profile-avatar" id="myProfileAvatar">👤</div>
+      <div class="my-profile-info">
+        <div class="my-profile-name" id="myProfileName">Profilingizni to'ldiring</div>
+        <div class="my-profile-hudud" id="myProfileHudud">Ism va hududingizni kiriting</div>
+      </div>
+      <button class="my-profile-edit" onclick="openProfileEditModal()">✏️</button>
+    </div>
+
     <div class="catalog-header">
-      <h2>👤 Mening e'lonlarim</h2>
+      <h2>📋 Mening e'lonlarim</h2>
       <div class="count" id="profileCount">Yuklanmoqda...</div>
     </div>
     <div class="profile-list" id="profileList"></div>
@@ -600,6 +647,52 @@
     </div>
   </div>
 
+  <!-- PROFILNI TAHRIRLASH OYNASI -->
+  <div class="edit-modal" id="profileEditModal" onclick="closeProfileEditModal()">
+    <div class="edit-sheet" onclick="event.stopPropagation()">
+      <div class="edit-sheet-header">
+        <div class="edit-sheet-title">👤 Profilni tahrirlash</div>
+        <span class="edit-close" onclick="closeProfileEditModal()">✕</span>
+      </div>
+      <div class="edit-sheet-body">
+        <div class="form-group-simple">
+          <label>Rasm / Avatar</label>
+          <div class="avatar-slot" id="avatarSlot">
+            <span class="cam-emoji" id="avatarSlotCam">📷</span>
+            <img class="slot-preview" id="avatarPreview" style="display:none;" alt="">
+            <input type="file" accept="image/*" capture="environment" id="avatarInput">
+          </div>
+        </div>
+        <div class="form-group-simple">
+          <label>Ism-familya</label>
+          <input type="text" class="wizard-input" id="profileIsmFamilya" placeholder="Masalan: Sodiq Tursunov">
+        </div>
+        <div class="form-group-simple">
+          <label>Viloyat</label>
+          <select class="wizard-input" id="profileViloyat">
+            <option value="">— Tanlang —</option>
+          </select>
+        </div>
+        <div class="form-group-simple">
+          <label>Tuman / shahar</label>
+          <select class="wizard-input" id="profileTuman" disabled>
+            <option value="">— Avval viloyatni tanlang —</option>
+          </select>
+        </div>
+        <div class="form-group-simple">
+          <label>Telefon</label>
+          <input type="tel" class="wizard-input" id="profileTelefon" placeholder="+998 90 123 45 67">
+        </div>
+        <div class="form-group-simple">
+          <label>Aniq joylashuv (ixtiyoriy)</label>
+          <div class="big-location-btn" id="profileLocationBtn">📍 Bosing — joylashuv aniqlanadi</div>
+        </div>
+        <div id="profileMsg"></div>
+        <button class="wizard-btn-next" id="profileSaveBtn" onclick="saveProfile()">💾 Saqlash</button>
+      </div>
+    </div>
+  </div>
+
 <script>
   const tg = window.Telegram ? window.Telegram.WebApp : null;
   if (tg) { tg.ready(); tg.expand(); }
@@ -669,7 +762,8 @@
     document.getElementById('createView').style.display = tab === 'create' ? 'block' : 'none';
     document.getElementById('profileView').style.display = tab === 'profile' ? 'block' : 'none';
 
-    if (tab === 'profile') loadProfile();
+    if (tab === 'profile') { loadMyProfile(); loadProfile(); }
+    if (tab === 'create') { prefillFromProfile(); }
   }
 
   function resetFilters() {
@@ -709,8 +803,8 @@
     "Qoraqalpog'iston": ["Nukus shahri", "Amudaryo", "Beruniy", "Chimboy", "Ellikqal'a", "Kegeyli", "Mo'ynoq", "Nukus tumani", "Qanliko'l", "Qo'ng'irot", "Qorao'zak", "Shumanay", "Taxtako'pir", "To'rtko'l", "Xo'jayli"],
   };
 
-  function populateViloyatSelect() {
-    const sel = document.getElementById('formViloyat');
+  function populateViloyatSelect(selectId) {
+    const sel = document.getElementById(selectId);
     Object.keys(REGIONS).forEach(v => {
       const opt = document.createElement('option');
       opt.value = v;
@@ -718,7 +812,8 @@
       sel.appendChild(opt);
     });
   }
-  populateViloyatSelect();
+  populateViloyatSelect('formViloyat');
+  populateViloyatSelect('profileViloyat');
 
   document.getElementById('formViloyat').addEventListener('change', (e) => {
     const tumanSel = document.getElementById('formTuman');
@@ -747,6 +842,23 @@
     } else {
       formHudud = '';
       document.getElementById('nextBtn2').disabled = true;
+    }
+  });
+
+  document.getElementById('profileViloyat').addEventListener('change', (e) => {
+    const tumanSel = document.getElementById('profileTuman');
+    tumanSel.innerHTML = '<option value="">— Tanlang —</option>';
+    const viloyat = e.target.value;
+    if (viloyat && REGIONS[viloyat]) {
+      tumanSel.disabled = false;
+      REGIONS[viloyat].forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        tumanSel.appendChild(opt);
+      });
+    } else {
+      tumanSel.disabled = true;
     }
   });
 
@@ -1012,11 +1124,12 @@
             <div class="p-name">${item.tavsif}</div>
             ${item.hudud ? `<div class="p-price">📍 ${item.hudud}</div>` : ''}
             <div class="p-price">${item.narx}</div>
-            ${item.status === 'approved' ? `<div class="p-price">👁 ${item.views || 0} marta ko'rilgan</div>` : ''}
+            ${item.status === 'approved' ? `<div class="p-price">👁 ${item.views || 0} marta ko'rilgan · ❤️ ${item.interest_count || 0} qiziqdi</div>` : ''}
             <span class="status-pill ${item.status}">${item.status_label}</span>
             ${showActions ? `
               <div class="profile-actions">
                 <button class="btn-edit" onclick="openEditModal(${item.id})">✏️ Tahrirlash</button>
+                ${item.status === 'approved' && item.interest_count > 0 ? `<button class="btn-interests" onclick="showInterestedUsers(${item.id})">👥 Qiziqqanlar</button>` : ''}
                 ${item.status === 'approved' ? `<button class="btn-sold" onclick="markSold(${item.id})">✅ Sotildi</button>` : ''}
                 <button class="btn-delete" onclick="deleteListing(${item.id})">🗑️ O'chirish</button>
               </div>
@@ -1115,6 +1228,208 @@
     }
     btn.disabled = false;
     btn.textContent = '💾 Saqlash';
+  }
+
+  // ---------------- FOYDALANUVCHI PROFILI ----------------
+  let myProfileData = null;
+  let profileAvatarFile = null;
+  let profileLat = null;
+  let profileLon = null;
+
+  async function loadMyProfile() {
+    try {
+      const res = await fetch(`/api/get-profile?init_data=${encodeURIComponent(tgInitData)}&user_id=${currentUserId || ''}`);
+      const data = await res.json();
+      if (data.exists) {
+        myProfileData = data;
+        document.getElementById('myProfileName').textContent = data.ism_familya;
+        document.getElementById('myProfileHudud').textContent = data.hudud ? `📍 ${data.hudud}` : 'Hudud kiritilmagan';
+        const avatarBox = document.getElementById('myProfileAvatar');
+        avatarBox.innerHTML = data.avatar_url ? `<img src="${data.avatar_url}" alt="">` : '👤';
+      } else {
+        myProfileData = null;
+        document.getElementById('myProfileName').textContent = 'Profilingizni to\'ldiring';
+        document.getElementById('myProfileHudud').textContent = 'Ism va hududingizni kiriting';
+      }
+    } catch (e) { /* jim o'tkazamiz */ }
+  }
+
+  function openProfileEditModal() {
+    if (myProfileData) {
+      document.getElementById('profileIsmFamilya').value = myProfileData.ism_familya || '';
+      document.getElementById('profileTelefon').value = myProfileData.telefon || '';
+      if (myProfileData.avatar_url) {
+        document.getElementById('avatarSlotCam').style.display = 'none';
+        const prev = document.getElementById('avatarPreview');
+        prev.src = myProfileData.avatar_url;
+        prev.style.display = 'block';
+      }
+      // Hudud matnidan viloyat/tumanni tiklashga harakat qilamiz
+      if (myProfileData.hudud) {
+        const parts = myProfileData.hudud.split(',').map(s => s.trim());
+        const viloyat = parts.length > 1 ? parts[1] : parts[0];
+        const tuman = parts[0];
+        if (REGIONS[viloyat]) {
+          document.getElementById('profileViloyat').value = viloyat;
+          const tumanSel = document.getElementById('profileTuman');
+          tumanSel.innerHTML = '<option value="">— Tanlang —</option>';
+          tumanSel.disabled = false;
+          REGIONS[viloyat].forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t; opt.textContent = t;
+            tumanSel.appendChild(opt);
+          });
+          tumanSel.value = tuman;
+        }
+      }
+      if (myProfileData.lat) { profileLat = myProfileData.lat; profileLon = myProfileData.lon; }
+    }
+    document.getElementById('profileMsg').innerHTML = '';
+    document.getElementById('profileEditModal').classList.add('open');
+  }
+
+  function closeProfileEditModal() {
+    document.getElementById('profileEditModal').classList.remove('open');
+  }
+
+  document.getElementById('avatarInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    profileAvatarFile = file;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      document.getElementById('avatarSlotCam').style.display = 'none';
+      const prev = document.getElementById('avatarPreview');
+      prev.src = ev.target.result;
+      prev.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  document.getElementById('profileLocationBtn').addEventListener('click', () => {
+    if (!navigator.geolocation) return;
+    const btn = document.getElementById('profileLocationBtn');
+    btn.textContent = '📍 Aniqlanmoqda...';
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        profileLat = pos.coords.latitude;
+        profileLon = pos.coords.longitude;
+        btn.textContent = '✅ Joylashuv aniqlandi!';
+        btn.classList.add('confirmed');
+      },
+      () => { btn.textContent = '❌ Ruxsat berilmadi — qayta bosing'; }
+    );
+  });
+
+  async function saveProfile() {
+    const msgBox = document.getElementById('profileMsg');
+    const btn = document.getElementById('profileSaveBtn');
+    const ism = document.getElementById('profileIsmFamilya').value.trim();
+    const viloyat = document.getElementById('profileViloyat').value;
+    const tuman = document.getElementById('profileTuman').value;
+    const telefon = document.getElementById('profileTelefon').value.trim();
+    const hudud = (viloyat && tuman) ? ((tuman === viloyat) ? viloyat : `${tuman}, ${viloyat}`) : '';
+
+    if (!ism) {
+      msgBox.innerHTML = '<div class="form-msg error">Ism-familya kiritilishi shart.</div>';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Saqlanmoqda...';
+
+    const fd = new FormData();
+    fd.append('init_data', tgInitData);
+    fd.append('user_id', currentUserId || '');
+    fd.append('ism_familya', ism);
+    fd.append('hudud', hudud);
+    fd.append('telefon', telefon);
+    if (profileLat !== null) fd.append('lat', profileLat);
+    if (profileLon !== null) fd.append('lon', profileLon);
+    if (profileAvatarFile) fd.append('avatar', profileAvatarFile);
+
+    try {
+      const res = await fetch('/api/update-profile', { method: 'POST', body: fd });
+      const result = await res.json();
+      if (result.success) {
+        closeProfileEditModal();
+        loadMyProfile();
+      } else {
+        msgBox.innerHTML = `<div class="form-msg error">Xatolik: ${result.error || 'saqlanmadi'}</div>`;
+      }
+    } catch (e) {
+      msgBox.innerHTML = '<div class="form-msg error">Internet xatoligi. Qayta urinib ko\'ring.</div>';
+    }
+    btn.disabled = false;
+    btn.textContent = '💾 Saqlash';
+  }
+
+  function prefillFromProfile() {
+    if (!myProfileData) return;
+    const phoneInput = document.getElementById('formPhone');
+    if (phoneInput && !phoneInput.value && myProfileData.telefon) {
+      phoneInput.value = myProfileData.telefon;
+      document.getElementById('nextBtn6').disabled = false;
+    }
+    if (myProfileData.hudud && !formHudud) {
+      const parts = myProfileData.hudud.split(',').map(s => s.trim());
+      const viloyat = parts.length > 1 ? parts[1] : parts[0];
+      const tuman = parts[0];
+      if (REGIONS[viloyat]) {
+        const viloyatSel = document.getElementById('formViloyat');
+        viloyatSel.value = viloyat;
+        const tumanSel = document.getElementById('formTuman');
+        tumanSel.innerHTML = '<option value="">— Tanlang —</option>';
+        tumanSel.disabled = false;
+        REGIONS[viloyat].forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t; opt.textContent = t;
+          tumanSel.appendChild(opt);
+        });
+        tumanSel.value = tuman;
+        formHudud = myProfileData.hudud;
+        document.getElementById('nextBtn2').disabled = false;
+      }
+    }
+  }
+
+  // ---------------- "QIZIQISH BILDIRISH" ----------------
+  async function toggleInterest(itemId, event) {
+    if (event) event.stopPropagation();
+    if (!currentUserId) {
+      alert('Qiziqish bildirish uchun ilovani Telegram orqali oching.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/express-interest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: itemId, init_data: tgInitData, user_id: currentUserId }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        const btn = document.getElementById(`interest-btn-${itemId}`);
+        const countEl = document.getElementById(`interest-count-${itemId}`);
+        if (btn) {
+          btn.classList.toggle('active', result.is_interested);
+          btn.textContent = result.is_interested ? '❤️ Qiziqdingiz' : '🤍 Qiziqish bildirish';
+        }
+        if (countEl) countEl.textContent = `❤️ ${result.count} kishi qiziqmoqda`;
+      }
+    } catch (e) { /* jim o'tkazamiz */ }
+  }
+
+  async function showInterestedUsers(listingId) {
+    try {
+      const res = await fetch(`/api/listing-interests?id=${listingId}&init_data=${encodeURIComponent(tgInitData)}&user_id=${currentUserId || ''}`);
+      const data = await res.json();
+      if (data.error) { alert(data.error); return; }
+      if (data.length === 0) { alert('Hozircha hech kim qiziqish bildirmagan.'); return; }
+      const lines = data.map(u => `👤 ${u.ism_familya}${u.telefon ? '  📞 ' + u.telefon : ''}`).join('\n');
+      alert(`Qiziqqanlar ro'yxati:\n\n${lines}`);
+    } catch (e) {
+      alert('Xatolik yuz berdi.');
+    }
   }
 
   function requestLocation() {
@@ -1277,10 +1592,12 @@
             <div class="price">${item.narx}</div>
             <div class="location-line">${locationText}</div>
             <div class="views-line">👁 ${item.views || 0} marta ko'rilgan</div>
+            <div class="interest-line" id="interest-count-${item.id}">❤️ ${item.interest_count || 0} kishi qiziqmoqda</div>
             <div class="btn-row">
               <a class="call-btn" href="tel:${item.telefon}">📞 Qo'ng'iroq</a>
               <a class="nav-btn" href="https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lon}" target="_blank">🧭 Yo'nalish</a>
             </div>
+            <button class="interest-btn${item.is_interested ? ' active' : ''}" id="interest-btn-${item.id}" onclick="toggleInterest(${item.id}, event)">${item.is_interested ? '❤️ Qiziqdingiz' : '🤍 Qiziqish bildirish'}</button>
             <button class="share-btn" onclick="shareListing(${item.id}, event)">🔗 Ulashish</button>
           </div>
         `;
@@ -1292,6 +1609,7 @@
   }
 
   loadListings();
+  loadMyProfile();
 </script>
 
 </body>
