@@ -140,6 +140,36 @@ def init_db():
         cur.execute("ALTER TABLE listings ADD COLUMN hudud TEXT DEFAULT ''")
     if "views" not in existing_cols:
         cur.execute("ALTER TABLE listings ADD COLUMN views INTEGER DEFAULT 0")
+
+    # Foydalanuvchi profillari jadvali
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            telegram_id INTEGER PRIMARY KEY,
+            ism_familya TEXT,
+            hudud TEXT,
+            telefon TEXT,
+            avatar_file_id TEXT,
+            lat REAL,
+            lon REAL,
+            updated_at TEXT
+        )
+        """
+    )
+
+    # "Qiziqish bildirish" jadvali — har bir foydalanuvchi bitta e'longa faqat bir marta qiziqish bildira oladi
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS interests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            listing_id INTEGER,
+            telegram_id INTEGER,
+            sana TEXT,
+            UNIQUE(listing_id, telegram_id)
+        )
+        """
+    )
+
     conn.commit()
     conn.close()
 
@@ -275,6 +305,108 @@ def photo_ids_to_urls(photo_file_id_field):
     return [f"/photo/{fid}" for fid in ids]
 
 
+# ---------------------------------------------------------------------------
+# FOYDALANUVCHI PROFILI
+# ---------------------------------------------------------------------------
+
+def get_user_profile(telegram_id):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT telegram_id, ism_familya, hudud, telefon, avatar_file_id, lat, lon FROM users WHERE telegram_id = ?",
+        (telegram_id,),
+    )
+    row = cur.fetchone()
+    conn.close()
+    return row
+
+
+def upsert_user_profile(telegram_id, ism_familya, hudud, telefon, avatar_file_id, lat, lon):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO users (telegram_id, ism_familya, hudud, telefon, avatar_file_id, lat, lon, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(telegram_id) DO UPDATE SET
+               ism_familya = excluded.ism_familya,
+               hudud = excluded.hudud,
+               telefon = excluded.telefon,
+               avatar_file_id = COALESCE(NULLIF(excluded.avatar_file_id, ''), avatar_file_id),
+               lat = excluded.lat,
+               lon = excluded.lon,
+               updated_at = excluded.updated_at""",
+        (telegram_id, ism_familya, hudud, telefon, avatar_file_id, lat, lon, datetime.now().isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# "QIZIQISH BILDIRISH"
+# ---------------------------------------------------------------------------
+
+def toggle_interest(listing_id, telegram_id):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM interests WHERE listing_id = ? AND telegram_id = ?", (listing_id, telegram_id))
+    existing = cur.fetchone()
+    if existing:
+        cur.execute("DELETE FROM interests WHERE id = ?", (existing[0],))
+        is_interested = False
+    else:
+        cur.execute(
+            "INSERT INTO interests (listing_id, telegram_id, sana) VALUES (?, ?, ?)",
+            (listing_id, telegram_id, datetime.now().isoformat()),
+        )
+        is_interested = True
+    cur.execute("SELECT COUNT(*) FROM interests WHERE listing_id = ?", (listing_id,))
+    count = cur.fetchone()[0]
+    conn.commit()
+    conn.close()
+    return is_interested, count
+
+
+def get_interest_counts_map():
+    """Barcha e'lonlar uchun {listing_id: soni} lug'atini qaytaradi (bitta so'rovda, tezroq)"""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT listing_id, COUNT(*) FROM interests GROUP BY listing_id")
+    result = {row[0]: row[1] for row in cur.fetchall()}
+    conn.close()
+    return result
+
+
+def get_my_interested_ids(telegram_id):
+    """Shu foydalanuvchi qiziqish bildirgan e'lon ID'lari to'plami"""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT listing_id FROM interests WHERE telegram_id = ?", (telegram_id,))
+    result = {row[0] for row in cur.fetchall()}
+    conn.close()
+    return result
+
+
+def get_interested_users(listing_id, owner_telegram_id):
+    """Faqat e'lon egasi uchun — qiziqqan odamlarning ism va telefonlari"""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    # Egasini tekshiramiz
+    cur.execute("SELECT telegram_id FROM listings WHERE id = ?", (listing_id,))
+    row = cur.fetchone()
+    if not row or row[0] != owner_telegram_id:
+        conn.close()
+        return None
+    cur.execute(
+        """SELECT u.ism_familya, u.telefon, i.sana FROM interests i
+           LEFT JOIN users u ON u.telegram_id = i.telegram_id
+           WHERE i.listing_id = ? ORDER BY i.id DESC""",
+        (listing_id,),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+
 def distance_km(lat1, lon1, lat2, lon2):
     R = 6371
     dlat = math.radians(lat2 - lat1)
@@ -313,6 +445,11 @@ def api_listings():
     lon = request.args.get("lon", type=float)
 
     rows = search_listings(kategoriya, search_text if search_text else None)
+    interest_counts = get_interest_counts_map()
+
+    # Joriy foydalanuvchi kim ekanini bilish uchun (qaysi e'lonlarga qiziqish bildirganini bilish)
+    telegram_id, _ = resolve_user_id(request.args.get("init_data", ""), request.args.get("user_id", ""))
+    my_interested = get_my_interested_ids(telegram_id) if telegram_id else set()
 
     result = []
     for id_, kat, tavsif, narx, photo_file_id, item_lat, item_lon, telefon, hudud, views in rows:
@@ -334,6 +471,8 @@ def api_listings():
                 "lon": item_lon,
                 "hudud": hudud or "",
                 "views": views or 0,
+                "interest_count": interest_counts.get(id_, 0),
+                "is_interested": id_ in my_interested,
             }
         )
 
@@ -399,6 +538,7 @@ def api_my_listings():
         return jsonify({"error": "Tasdiqlanmagan so'rov. Mini App'ni Telegram orqali oching."}), 401
 
     rows = get_my_listings(telegram_id)
+    interest_counts = get_interest_counts_map()
     result = []
     for id_, kat, tavsif, narx, photo_file_id, status, sana, hudud, views in rows:
         photo_urls = photo_ids_to_urls(photo_file_id)
@@ -415,6 +555,7 @@ def api_my_listings():
                 "sana": sana,
                 "hudud": hudud or "",
                 "views": views or 0,
+                "interest_count": interest_counts.get(id_, 0),
             }
         )
     return jsonify(result)
@@ -477,6 +618,98 @@ def api_view_listing():
         return jsonify({"success": False}), 400
     increment_views(listing_id)
     return jsonify({"success": True})
+
+
+@flask_app.route("/api/get-profile")
+def api_get_profile():
+    telegram_id, _ = resolve_user_id(request.args.get("init_data", ""), request.args.get("user_id", ""))
+    if not telegram_id:
+        return jsonify({"error": "Tasdiqlanmagan so'rov"}), 401
+
+    row = get_user_profile(telegram_id)
+    if not row:
+        return jsonify({"exists": False})
+
+    _, ism_familya, hudud, telefon, avatar_file_id, lat, lon = row
+    return jsonify(
+        {
+            "exists": True,
+            "ism_familya": ism_familya or "",
+            "hudud": hudud or "",
+            "telefon": telefon or "",
+            "avatar_url": f"/photo/{avatar_file_id}" if avatar_file_id else "",
+            "lat": lat,
+            "lon": lon,
+        }
+    )
+
+
+@flask_app.route("/api/update-profile", methods=["POST"])
+def api_update_profile():
+    telegram_id, _ = resolve_user_id(request.form.get("init_data", ""), request.form.get("user_id", ""))
+    if not telegram_id:
+        return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov"}), 401
+
+    ism_familya = (request.form.get("ism_familya") or "").strip()
+    hudud = (request.form.get("hudud") or "").strip()
+    telefon = (request.form.get("telefon") or "").strip()
+    lat = request.form.get("lat", type=float)
+    lon = request.form.get("lon", type=float)
+    avatar = request.files.get("avatar")
+
+    if not ism_familya:
+        return jsonify({"success": False, "error": "Ism-familya kiritilishi shart"}), 400
+
+    avatar_file_id = ""
+    if avatar:
+        try:
+            resp = requests.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
+                data={"chat_id": telegram_id},
+                files={"photo": (avatar.filename, avatar.stream, avatar.mimetype)},
+                timeout=20,
+            )
+            result = resp.json()
+            if result.get("ok"):
+                avatar_file_id = result["result"]["photo"][-1]["file_id"]
+        except Exception as e:
+            logger.warning("Avatar yuborishda xatolik: %s", e)
+
+    upsert_user_profile(telegram_id, ism_familya, hudud, telefon, avatar_file_id, lat, lon)
+    return jsonify({"success": True})
+
+
+@flask_app.route("/api/express-interest", methods=["POST"])
+def api_express_interest():
+    data = request.get_json(force=True)
+    telegram_id, _ = resolve_user_id(data.get("init_data", ""), data.get("user_id", ""))
+    if not telegram_id:
+        return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov"}), 401
+
+    listing_id = data.get("id")
+    if not listing_id:
+        return jsonify({"success": False, "error": "id kerak"}), 400
+
+    is_interested, count = toggle_interest(listing_id, telegram_id)
+    return jsonify({"success": True, "is_interested": is_interested, "count": count})
+
+
+@flask_app.route("/api/listing-interests")
+def api_listing_interests():
+    telegram_id, _ = resolve_user_id(request.args.get("init_data", ""), request.args.get("user_id", ""))
+    if not telegram_id:
+        return jsonify({"error": "Tasdiqlanmagan so'rov"}), 401
+
+    listing_id = request.args.get("id", type=int)
+    if not listing_id:
+        return jsonify({"error": "id kerak"}), 400
+
+    rows = get_interested_users(listing_id, telegram_id)
+    if rows is None:
+        return jsonify({"error": "Bu sizning e'loningiz emas"}), 403
+
+    result = [{"ism_familya": r[0] or "Ism kiritilmagan", "telefon": r[1] or "", "sana": r[2]} for r in rows]
+    return jsonify(result)
 
 
 @flask_app.route("/api/create-listing", methods=["POST"])
