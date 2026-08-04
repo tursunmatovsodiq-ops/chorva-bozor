@@ -726,8 +726,8 @@ def api_create_listing():
         narx = request.form.get("narx", "").strip()
         telefon = request.form.get("telefon", "").strip()
         hudud = request.form.get("hudud", "").strip()
-        lat = float(request.form.get("lat"))
-        lon = float(request.form.get("lon"))
+        lat = request.form.get("lat", type=float)
+        lon = request.form.get("lon", type=float)
         photos = request.files.getlist("photos")[:3]  # eng ko'pi bilan 3 ta rasm
 
         if not all([kategoriya, tavsif, narx, telefon]) or not photos:
