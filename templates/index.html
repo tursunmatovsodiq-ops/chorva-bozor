@@ -74,23 +74,32 @@
 
   .chips { display: flex; gap: 14px; padding: 12px 16px 4px; overflow-x: auto; }
   .chip {
-    flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 6px;
-    width: 62px; cursor: pointer;
+    flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 7px;
+    width: 74px; cursor: pointer;
   }
   .chip .circle {
-    width: 58px; height: 58px; border-radius: 50%;
+    width: 68px; height: 68px; border-radius: 22px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 28px; border: 2.5px solid transparent;
-    box-shadow: inset 0 -6px 10px rgba(0,0,0,0.14), inset 0 2px 4px rgba(255,255,255,0.5);
+    font-size: 34px; border: 3px solid transparent;
+    position: relative; overflow: hidden;
+    box-shadow: 0 7px 14px rgba(0,0,0,0.28);
+    transition: transform 0.15s ease;
   }
-  .circle-all   { background: linear-gradient(150deg, #EAF4EC, #C9DECB); }
-  .circle-mol   { background: linear-gradient(150deg, #D8B27C, #8B5A2B); }
-  .circle-qoy   { background: linear-gradient(150deg, #F7F3E8, #D6CCB8); }
-  .circle-echki { background: linear-gradient(150deg, #CBC0A8, #8A7A5F); }
-  .circle-parranda { background: linear-gradient(150deg, #F6C578, #E0692F); }
-  .circle-yem   { background: linear-gradient(150deg, #EBDA9C, #C89B24); }
-  .chip .label { font-size: 10.5px; font-weight: 700; color: var(--ink); text-align: center; }
-  .chip.active .circle { border-color: var(--brown); }
+  .chip .circle::before {
+    content: ''; position: absolute; top: -40%; left: -20%;
+    width: 55%; height: 180%;
+    background: rgba(255,255,255,0.32);
+    transform: rotate(22deg);
+  }
+  .chip:active .circle { transform: scale(0.92); }
+  .circle-all       { background: linear-gradient(150deg, #3EE0A0, #0E9F6E); }
+  .circle-mol       { background: linear-gradient(150deg, #FDA35D, #C2570D); }
+  .circle-qoy       { background: linear-gradient(150deg, #6FA8FF, #2457D6); }
+  .circle-echki     { background: linear-gradient(150deg, #B794FA, #7C3AED); }
+  .circle-parranda  { background: linear-gradient(150deg, #FF8A7A, #D6301F); }
+  .circle-yem       { background: linear-gradient(150deg, #FFD65C, #D69A0A); }
+  .chip .label { font-size: 11px; font-weight: 700; color: var(--ink); text-align: center; }
+  .chip.active .circle { border-color: var(--brown); transform: scale(1.05); }
   .chip.active .label { color: var(--brown); }
 
   .location-banner {
@@ -360,6 +369,11 @@
     border-radius: 16px; padding: 22px 16px; font-size: 16px; font-weight: 800; text-align: center;
   }
   .big-location-btn.confirmed { background: #DDEEE0; border-color: #3F7A4F; color: #3F7A4F; }
+  .skip-location-btn {
+    text-align: center; padding: 12px; font-size: 13px; font-weight: 700;
+    color: var(--muted); text-decoration: underline; cursor: pointer;
+  }
+  .skip-location-btn.confirmed { color: var(--brown); }
 
   .wizard-nav { display: flex; gap: 10px; margin-top: auto; padding-top: 6px; }
   .wizard-btn-back {
@@ -562,11 +576,12 @@
       </div>
     </div>
 
-    <!-- 7-QADAM: ANIQ JOYLASHUV (GPS) -->
+    <!-- 7-QADAM: ANIQ JOYLASHUV (GPS, ixtiyoriy) -->
     <div class="wizard-step" data-step="7">
       <div class="wizard-question">🎯 Aniq joyingiz</div>
-      <div class="wizard-hint">Xaridorlarga masofa va yo'nalishni ko'rsatish uchun</div>
-      <div class="big-location-btn" id="formLocationBtn">📍 Bosing — joylashuv aniqlanadi</div>
+      <div class="wizard-hint">Xaridorlarga masofa va yo'nalishni ko'rsatish uchun (ixtiyoriy — hudud allaqachon kiritilgan)</div>
+      <div class="big-location-btn" id="formLocationBtn">📍 GPS orqali aniqlash</div>
+      <div class="skip-location-btn" id="skipLocationBtn" onclick="skipLocation()">⏭️ Hozircha kiritmayman</div>
       <div class="wizard-nav">
         <button class="wizard-btn-back" onclick="wizardBack()">⬅️</button>
         <button class="wizard-btn-next" id="nextBtn7" onclick="wizardNext()" disabled>Keyingi ➜</button>
@@ -1006,6 +1021,17 @@
     );
   });
 
+  function skipLocation() {
+    formLat = null;
+    formLon = null;
+    document.getElementById('formLocationBtn').classList.remove('confirmed');
+    document.getElementById('formLocationBtn').textContent = '📍 GPS orqali aniqlash';
+    const skipBtn = document.getElementById('skipLocationBtn');
+    skipBtn.classList.add('confirmed');
+    skipBtn.textContent = '✅ Kiritmaslikni tanladingiz';
+    document.getElementById('nextBtn7').disabled = false;
+  }
+
   // 7-qadam: yakuniy tekshiruv
   function fillSummary() {
     // Birinchi tanlangan rasmni ko'rsatamiz
@@ -1032,8 +1058,8 @@
     fd.append('tavsif', document.getElementById('formDesc').value.trim());
     fd.append('narx', document.getElementById('formPrice').value.trim());
     fd.append('telefon', document.getElementById('formPhone').value.trim());
-    fd.append('lat', formLat);
-    fd.append('lon', formLon);
+    fd.append('lat', formLat !== null ? formLat : '');
+    fd.append('lon', formLon !== null ? formLon : '');
     formPhotoFiles.forEach(file => {
       if (file) fd.append('photos', file);
     });
@@ -1079,8 +1105,11 @@
     });
     document.getElementById('formMsg').innerHTML = '';
     const locBtn = document.getElementById('formLocationBtn');
-    locBtn.textContent = '📍 Bosing — joylashuv aniqlanadi';
+    locBtn.textContent = '📍 GPS orqali aniqlash';
     locBtn.classList.remove('confirmed');
+    const skipBtn = document.getElementById('skipLocationBtn');
+    skipBtn.textContent = '⏭️ Hozircha kiritmayman';
+    skipBtn.classList.remove('confirmed');
     ['nextBtn2','nextBtn3','nextBtn4','nextBtn5','nextBtn6','nextBtn7'].forEach(id => {
       document.getElementById(id).disabled = true;
     });
@@ -1595,7 +1624,7 @@
             <div class="interest-line" id="interest-count-${item.id}">❤️ ${item.interest_count || 0} kishi qiziqmoqda</div>
             <div class="btn-row">
               <a class="call-btn" href="tel:${item.telefon}">📞 Qo'ng'iroq</a>
-              <a class="nav-btn" href="https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lon}" target="_blank">🧭 Yo'nalish</a>
+              ${item.lat && item.lon ? `<a class="nav-btn" href="https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lon}" target="_blank">🧭 Yo'nalish</a>` : ''}
             </div>
             <button class="interest-btn${item.is_interested ? ' active' : ''}" id="interest-btn-${item.id}" onclick="toggleInterest(${item.id}, event)">${item.is_interested ? '❤️ Qiziqdingiz' : '🤍 Qiziqish bildirish'}</button>
             <button class="share-btn" onclick="shareListing(${item.id}, event)">🔗 Ulashish</button>
