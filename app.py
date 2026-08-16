@@ -814,7 +814,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     fresh_url = get_mini_app_url()
     if fresh_url:
         keyboard = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("🐄 Chorva Bozorni ochish", web_app=WebAppInfo(url=fresh_url))]]
+            [[InlineKeyboardButton("🐄 Ilovaga kirish", web_app=WebAppInfo(url=fresh_url))]]
         )
     else:
         keyboard = None
@@ -884,7 +884,7 @@ async def post_init(application: Application) -> None:
 
             await application.bot.set_chat_menu_button(
                 menu_button=MenuButtonWebApp(
-                    text="🐄 Bozorni ochish", web_app=WebAppInfo(url=MINI_APP_URL)
+                    text="🐄 Ilovaga kirish", web_app=WebAppInfo(url=MINI_APP_URL)
                 )
             )
             logger.info("Doimiy Menu Button muvaffaqiyatli sozlandi")
