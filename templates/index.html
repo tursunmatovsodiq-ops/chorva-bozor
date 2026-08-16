@@ -583,6 +583,7 @@
       <div class="wizard-hint">Xaridorlarga masofa va yo'nalishni ko'rsatish uchun (ixtiyoriy — hudud allaqachon kiritilgan)</div>
       <div class="big-location-btn" id="formLocationBtn">📍 GPS orqali aniqlash</div>
       <div class="skip-location-btn" id="skipLocationBtn" onclick="skipLocation()">✍️ Qo'lda kiritish</div>
+      <input type="text" class="wizard-input" id="manualLocationInput" placeholder="Qishloq yoki mahalla nomini kiriting" style="display:none;">
       <div class="wizard-nav">
         <button class="wizard-btn-back" onclick="wizardBack()">⬅️</button>
         <button class="wizard-btn-next" id="nextBtn7" onclick="wizardNext()" disabled>Keyingi ➜</button>
@@ -795,6 +796,7 @@
   // ---------------- E'LON BERISH — BOSQICHMA-BOSQICH ----------------
   let formCategory = null;
   let formHudud = '';
+  let formManualLocation = '';
   let formPhotoFiles = [null, null, null];
   let formLat = null;
   let formLon = null;
@@ -1014,6 +1016,12 @@
         const btn = document.getElementById('formLocationBtn');
         btn.textContent = '✅ Joylashuv aniqlandi!';
         btn.classList.add('confirmed');
+        document.getElementById('manualLocationInput').style.display = 'none';
+        document.getElementById('manualLocationInput').value = '';
+        formManualLocation = '';
+        const skipBtn = document.getElementById('skipLocationBtn');
+        skipBtn.classList.remove('confirmed');
+        skipBtn.textContent = "✍️ Qo'lda kiritish";
         document.getElementById('nextBtn7').disabled = false;
       },
       () => {
@@ -1029,9 +1037,17 @@
     document.getElementById('formLocationBtn').textContent = '📍 GPS orqali aniqlash';
     const skipBtn = document.getElementById('skipLocationBtn');
     skipBtn.classList.add('confirmed');
-    skipBtn.textContent = "✅ Qo'lda kiritish tanlandi";
-    document.getElementById('nextBtn7').disabled = false;
+    skipBtn.textContent = "✍️ Qo'lda kiritish (tanlandi)";
+    const input = document.getElementById('manualLocationInput');
+    input.style.display = 'block';
+    input.focus();
+    document.getElementById('nextBtn7').disabled = !formManualLocation.trim();
   }
+
+  document.getElementById('manualLocationInput').addEventListener('input', (e) => {
+    formManualLocation = e.target.value;
+    document.getElementById('nextBtn7').disabled = !formManualLocation.trim();
+  });
 
   // 7-qadam: yakuniy tekshiruv
   function fillSummary() {
@@ -1039,7 +1055,10 @@
     const firstSlotPreview = document.querySelector('#slot-0 .slot-preview');
     document.getElementById('summaryPhoto').src = firstSlotPreview.src;
     document.getElementById('summaryCat').textContent = formCategory;
-    document.getElementById('summaryHudud').textContent = '📍 ' + formHudud;
+    const huduDisplay = formManualLocation.trim()
+      ? `${formManualLocation.trim()}, ${formHudud}`
+      : formHudud;
+    document.getElementById('summaryHudud').textContent = '📍 ' + huduDisplay;
     document.getElementById('summaryDesc').textContent = document.getElementById('formDesc').value.trim();
     document.getElementById('summaryPrice').textContent = '💰 ' + document.getElementById('formPrice').value.trim();
     document.getElementById('summaryPhone').textContent = '📞 ' + document.getElementById('formPhone').value.trim();
@@ -1055,7 +1074,10 @@
     fd.append('init_data', tgInitData);
     fd.append('user_id', currentUserId || '');
     fd.append('kategoriya', formCategory);
-    fd.append('hudud', formHudud);
+    const fullHudud = formManualLocation.trim()
+      ? `${formManualLocation.trim()}, ${formHudud}`
+      : formHudud;
+    fd.append('hudud', fullHudud);
     fd.append('tavsif', document.getElementById('formDesc').value.trim());
     fd.append('narx', document.getElementById('formPrice').value.trim());
     fd.append('telefon', document.getElementById('formPhone').value.trim());
@@ -1086,6 +1108,7 @@
   function resetForm() {
     formCategory = null;
     formHudud = '';
+    formManualLocation = '';
     formPhotoFiles = [null, null, null];
     formLat = null;
     formLon = null;
@@ -1111,6 +1134,8 @@
     const skipBtn = document.getElementById('skipLocationBtn');
     skipBtn.textContent = "✍️ Qo'lda kiritish";
     skipBtn.classList.remove('confirmed');
+    document.getElementById('manualLocationInput').style.display = 'none';
+    document.getElementById('manualLocationInput').value = '';
     ['nextBtn2','nextBtn3','nextBtn4','nextBtn5','nextBtn6','nextBtn7'].forEach(id => {
       document.getElementById(id).disabled = true;
     });
