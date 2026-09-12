@@ -1,29 +1,30 @@
 """
-Chorva Bozor — Bot + Mini App (bitta faylda, birga ishlaydi)
-================================================================
-Bu fayl ikkita narsani BIR VAQTDA ishga tushiradi:
-1. Telegram bot (avvalgi bot.py bilan bir xil funksiyalar)
-2. Kichik veb-server (Flask) — Mini App sahifasini va API'ni beradi
-
-Kerakli kutubxonalar: requirements.txt ga qarang
+HUDUD YANGILIKLARI — Bot + Mini App (bitta faylda)
+====================================================
+Chorva Bozor kodi asosida qayta yozildi:
+- 3 darajali hudud: O'zbekiston / Viloyat / Tuman
+- Yangiliklar: rasm YOKI video (Telegram file_id bilan saqlanadi)
+- Kommentariyalar
+- Bot: qisqa matn + "Batafsil" tugmasi (ilovaga to'g'ri ulanadi)
 
 Muhit o'zgaruvchilari:
-    BOT_TOKEN     - @BotFather dan olingan token
-    ADMIN_ID      - Sizning shaxsiy Telegram ID raqamingiz
-    MINI_APP_URL  - Railway bergan havola (masalan https://xxxx.up.railway.app)
-                    Bu deploy qilingandan KEYIN ma'lum bo'ladi, boshida bo'sh qoldirsa ham bo'ladi
-    PORT          - Railway avtomatik beradi, noutbukda test qilishda 8000 ishlatiladi
+    BOT_TOKEN     - @BotFather dan token
+    ADMIN_ID      - Sizning Telegram ID'ingiz
+    CHANNEL_ID    - Yangiliklar chiqadigan kanal ID (masalan -1001234567890) — ixtiyoriy
+    MINI_APP_URL  - Railway havolasi
+    BOT_USERNAME  - Bot nomi ("@" siz)
+    PORT          - Port (Railway avtomatik beradi)
+    DB_DIR        - Doimiy xotira papkasi (Railway Volume)
 """
 
 import logging
 import os
 import sqlite3
-import math
+import urllib.parse
 import threading
 import json
 import hmac
 import hashlib
-import urllib.parse
 import time
 from datetime import datetime
 
@@ -49,63 +50,65 @@ from telegram.ext import (
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "SIZNING_BOT_TOKENINGIZ_BU_YERGA")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
+CHANNEL_ID = os.environ.get("CHANNEL_ID", "")  # kanal bo'sh bo'lsa, faqat admin ko'radi
 MINI_APP_URL = os.environ.get("MINI_APP_URL", "")
-BOT_USERNAME = os.environ.get("BOT_USERNAME", "")  # masalan: chorva_bozor_bot ("@" belgisisiz)
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "")
 PORT = int(os.environ.get("PORT", "8000"))
 
-# DB_DIR — Railway'da "Volume" (doimiy xotira) ulanganda shu yerga yozing (masalan /data)
-# Agar DB_DIR o'rnatilmagan bo'lsa, oddiy joyga yoziladi (lekin bu holda Railway qayta
-# ishga tushganda ma'lumot yo'qolishi mumkin — shuning uchun volume qo'shish tavsiya etiladi)
 DB_DIR = os.environ.get("DB_DIR", os.path.dirname(__file__))
 os.makedirs(DB_DIR, exist_ok=True)
-DB_PATH = os.path.join(DB_DIR, "chorva.db")
+DB_PATH = os.path.join(DB_DIR, "yangilik.db")
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-CATEGORIES = ["🐄 Mol", "🐑 Qo'y", "🐐 Echki", "🐔 Parranda", "🌾 Yem-hashak"]
+LEVELS = {"uz": "O'zbekiston", "viloyat": "Viloyat", "tuman": "Tuman"}
+
+STATUS_LABELS = {
+    "pending": "⏳ Tekshirilmoqda",
+    "approved": "✅ Faol",
+    "rejected": "❌ Rad etilgan",
+}
+
 
 # ---------------------------------------------------------------------------
-# XAVFSIZLIK: Telegram Mini App'dan kelgan initData'ni tekshirish
+# XAVFSIZLIK: Telegram initData tekshiruvi
 # ---------------------------------------------------------------------------
-# Bu funksiya Telegramning rasmiy yo'riqnomasiga asoslangan: initData ichidagi
-# "hash" qiymatini bot tokeni yordamida qayta hisoblab, mos kelishini tekshiradi.
-# Agar mos kelmasa — bu ma'lumot soxta (birov o'zgartirgan) degani, va rad etiladi.
-
 
 def verify_telegram_init_data(init_data: str):
     if not init_data:
-        logger.warning("initData bo'sh keldi (uzunligi: 0)")
         return None
     try:
         parsed = dict(urllib.parse.parse_qsl(init_data, strict_parsing=True))
         received_hash = parsed.pop("hash", None)
         if not received_hash:
-            logger.warning("initData ichida 'hash' topilmadi. Kalitlar: %s", list(parsed.keys()))
             return None
-
         data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
         secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
         computed_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-
         if not hmac.compare_digest(computed_hash, received_hash):
-            logger.warning(
-                "Hash mos kelmadi. Kutilgan(qisqartirilgan)=%s..., Kelgan(qisqartirilgan)=%s..., BOT_TOKEN uzunligi=%d",
-                computed_hash[:10], received_hash[:10], len(BOT_TOKEN),
-            )
             return None
-
         user_json = parsed.get("user")
         if not user_json:
-            logger.warning("initData'da 'user' maydoni topilmadi")
             return None
-        user = json.loads(user_json)
-        return user  # {"id": ..., "first_name": ..., ...}
+        return json.loads(user_json)
     except Exception as e:
         logger.warning("initData tekshirishda xatolik: %s", e)
         return None
+
+
+def resolve_user_id(init_data: str, fallback_user_id: str):
+    user = verify_telegram_init_data(init_data)
+    if user:
+        return user["id"], user
+    if fallback_user_id:
+        try:
+            return int(fallback_user_id), None
+        except (TypeError, ValueError):
+            pass
+    return None, None
 
 
 # ---------------------------------------------------------------------------
@@ -117,129 +120,123 @@ def init_db():
     cur = conn.cursor()
     cur.execute(
         """
-        CREATE TABLE IF NOT EXISTS listings (
+        CREATE TABLE IF NOT EXISTS news (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             telegram_id INTEGER,
-            kategoriya TEXT,
-            tavsif TEXT,
-            narx TEXT,
-            photo_file_id TEXT,
-            lat REAL,
-            lon REAL,
-            telefon TEXT,
+            sarlavha TEXT,
+            matn TEXT,
+            media TEXT DEFAULT '',
+            media_types TEXT DEFAULT '',
+            level TEXT DEFAULT 'uz',
+            viloyat TEXT DEFAULT '',
+            tuman TEXT DEFAULT '',
             status TEXT DEFAULT 'pending',
+            views INTEGER DEFAULT 0,
             sana TEXT
         )
         """
     )
-    # Migratsiya: agar eski bazada "hudud" ustuni yo'q bo'lsa, uni xavfsiz qo'shamiz
-    # (mavjud ma'lumotlar hech qanday yo'qolmaydi)
-    cur.execute("PRAGMA table_info(listings)")
-    existing_cols = [row[1] for row in cur.fetchall()]
-    if "hudud" not in existing_cols:
-        cur.execute("ALTER TABLE listings ADD COLUMN hudud TEXT DEFAULT ''")
-    if "views" not in existing_cols:
-        cur.execute("ALTER TABLE listings ADD COLUMN views INTEGER DEFAULT 0")
-
-    # Foydalanuvchi profillari jadvali
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            news_id INTEGER,
+            telegram_id INTEGER,
+            ism TEXT DEFAULT '',
+            matn TEXT,
+            sana TEXT
+        )
+        """
+    )
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
             telegram_id INTEGER PRIMARY KEY,
             ism_familya TEXT,
-            hudud TEXT,
             telefon TEXT,
             avatar_file_id TEXT,
-            lat REAL,
-            lon REAL,
             updated_at TEXT
         )
         """
     )
-
-    # "Qiziqish bildirish" jadvali — har bir foydalanuvchi bitta e'longa faqat bir marta qiziqish bildira oladi
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS interests (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            listing_id INTEGER,
-            telegram_id INTEGER,
-            sana TEXT,
-            UNIQUE(listing_id, telegram_id)
-        )
-        """
-    )
-
     conn.commit()
     conn.close()
 
 
-def add_listing(telegram_id, kategoriya, tavsif, narx, photo_file_ids, lat, lon, telefon, hudud=""):
-    """photo_file_ids — bitta yoki bir nechta file_id, '|' bilan ajratilgan"""
+def add_news(telegram_id, sarlavha, matn, level, viloyat, tuman):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute(
-        """INSERT INTO listings
-           (telegram_id, kategoriya, tavsif, narx, photo_file_id, lat, lon, telefon, hudud, status, sana)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)""",
-        (telegram_id, kategoriya, tavsif, narx, photo_file_ids, lat, lon, telefon, hudud, datetime.now().isoformat()),
+        """INSERT INTO news
+           (telegram_id, sarlavha, matn, level, viloyat, tuman, status, sana)
+           VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)""",
+        (telegram_id, sarlavha, matn, level, viloyat, tuman, datetime.now().isoformat()),
     )
     conn.commit()
-    listing_id = cur.lastrowid
+    news_id = cur.lastrowid
     conn.close()
-    return listing_id
+    return news_id
 
 
-def set_listing_status(listing_id, status):
+def set_news_media(news_id, file_ids, media_types):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("UPDATE listings SET status = ? WHERE id = ?", (status, listing_id))
+    cur.execute(
+        "UPDATE news SET media = ?, media_types = ? WHERE id = ?",
+        ("|".join(file_ids), "|".join(media_types), news_id),
+    )
     conn.commit()
     conn.close()
 
 
-def set_listing_photos(listing_id, photo_file_ids):
+def set_news_status(news_id, status):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("UPDATE listings SET photo_file_id = ? WHERE id = ?", (photo_file_ids, listing_id))
+    cur.execute("UPDATE news SET status = ? WHERE id = ?", (status, news_id))
     conn.commit()
     conn.close()
 
 
-def get_listing(listing_id):
+def get_news(news_id):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("SELECT * FROM listings WHERE id = ?", (listing_id,))
+    cur.execute("SELECT * FROM news WHERE id = ?", (news_id,))
     row = cur.fetchone()
     conn.close()
     return row
 
 
-def search_listings(kategoriya=None, search_text=None):
+def search_news(level="uz", viloyat="", tuman="", search_text=""):
+    """3 darajali qoida:
+    - 'uz' tanlansa: barcha yangiliklar
+    - viloyat tanlansa: respublika + o'sha viloyat + o'sha viloyatning tumanlari
+    - tuman tanlansa: respublika + o'sha viloyat + o'sha tuman
+    """
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    query = """SELECT id, kategoriya, tavsif, narx, photo_file_id, lat, lon, telefon, hudud, views FROM listings
-               WHERE status = 'approved'"""
+    query = "SELECT id, sarlavha, matn, media, media_types, level, viloyat, tuman, views, sana FROM news WHERE status = 'approved'"
     params = []
-    if kategoriya and kategoriya != "all":
-        query += " AND kategoriya = ?"
-        params.append(kategoriya)
+    if level == "viloyat" and viloyat:
+        query += " AND (level = 'uz' OR (level = 'viloyat' AND viloyat = ?) OR (level = 'tuman' AND viloyat = ?))"
+        params += [viloyat, viloyat]
+    elif level == "tuman" and viloyat and tuman:
+        query += " AND (level = 'uz' OR (level = 'viloyat' AND viloyat = ?) OR (level = 'tuman' AND viloyat = ? AND tuman = ?))"
+        params += [viloyat, viloyat, tuman]
     if search_text:
-        query += " AND (tavsif LIKE ? OR hudud LIKE ?)"
-        params.append(f"%{search_text}%")
-        params.append(f"%{search_text}%")
+        query += " AND (sarlavha LIKE ? OR matn LIKE ?)"
+        params += [f"%{search_text}%", f"%{search_text}%"]
+    query += " ORDER BY id DESC"
     cur.execute(query, params)
     rows = cur.fetchall()
     conn.close()
     return rows
 
 
-def get_my_listings(telegram_id):
+def get_my_news(telegram_id):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute(
-        """SELECT id, kategoriya, tavsif, narx, photo_file_id, status, sana, hudud, views FROM listings
-           WHERE telegram_id = ? ORDER BY id DESC""",
+        "SELECT id, sarlavha, matn, media, media_types, level, viloyat, tuman, status, views, sana FROM news WHERE telegram_id = ? ORDER BY id DESC",
         (telegram_id,),
     )
     rows = cur.fetchall()
@@ -247,22 +244,31 @@ def get_my_listings(telegram_id):
     return rows
 
 
-def increment_views(listing_id):
+def increment_views(news_id):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("UPDATE listings SET views = views + 1 WHERE id = ? AND status = 'approved'", (listing_id,))
+    cur.execute("UPDATE news SET views = views + 1 WHERE id = ? AND status = 'approved'", (news_id,))
+    conn.commit()
+    conn.close()
+
+
+def delete_own_news(news_id, telegram_id):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("DELETE FROM comments WHERE news_id = ?", (news_id,))
+    cur.execute("DELETE FROM news WHERE id = ? AND telegram_id = ?", (news_id, telegram_id))
     affected = cur.rowcount
     conn.commit()
     conn.close()
     return affected > 0
 
 
-def mark_as_sold(listing_id, telegram_id):
+def update_own_news(news_id, telegram_id, sarlavha, matn):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute(
-        "UPDATE listings SET status = 'sold' WHERE id = ? AND telegram_id = ?",
-        (listing_id, telegram_id),
+        "UPDATE news SET sarlavha = ?, matn = ? WHERE id = ? AND telegram_id = ?",
+        (sarlavha, matn, news_id, telegram_id),
     )
     affected = cur.rowcount
     conn.commit()
@@ -270,50 +276,59 @@ def mark_as_sold(listing_id, telegram_id):
     return affected > 0
 
 
-def delete_own_listing(listing_id, telegram_id):
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute(
-        "DELETE FROM listings WHERE id = ? AND telegram_id = ?",
-        (listing_id, telegram_id),
-    )
-    affected = cur.rowcount
-    conn.commit()
-    conn.close()
-    return affected > 0
-
-
-def update_own_listing(listing_id, telegram_id, tavsif, narx, telefon, hudud):
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute(
-        """UPDATE listings SET tavsif = ?, narx = ?, telefon = ?, hudud = ?
-           WHERE id = ? AND telegram_id = ?""",
-        (tavsif, narx, telefon, hudud, listing_id, telegram_id),
-    )
-    affected = cur.rowcount
-    conn.commit()
-    conn.close()
-    return affected > 0
-
-
-def photo_ids_to_urls(photo_file_id_field):
-    """'id1|id2|id3' -> ['/photo/id1', '/photo/id2', '/photo/id3']"""
-    if not photo_file_id_field:
+def media_to_list(media_field, types_field):
+    if not media_field:
         return []
-    ids = [x for x in photo_file_id_field.split("|") if x]
-    return [f"/photo/{fid}" for fid in ids]
+    ids = [x for x in media_field.split("|") if x]
+    types = [x for x in (types_field or "").split("|") if x]
+    result = []
+    for i, fid in enumerate(ids):
+        t = types[i] if i < len(types) else "photo"
+        result.append({"url": f"/media/{fid}", "type": t})
+    return result
 
 
-# ---------------------------------------------------------------------------
-# FOYDALANUVCHI PROFILI
-# ---------------------------------------------------------------------------
+# ---------------- Kommentariyalar ----------------
+
+def add_comment(news_id, telegram_id, ism, matn):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO comments (news_id, telegram_id, ism, matn, sana) VALUES (?, ?, ?, ?, ?)",
+        (news_id, telegram_id, ism, matn, datetime.now().isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_comments(news_id):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, ism, matn, sana FROM comments WHERE news_id = ? ORDER BY id DESC",
+        (news_id,),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+
+def comment_counts_map():
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT news_id, COUNT(*) FROM comments GROUP BY news_id")
+    result = {row[0]: row[1] for row in cur.fetchall()}
+    conn.close()
+    return result
+
+
+# ---------------- Profil ----------------
 
 def get_user_profile(telegram_id):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute(
-        "SELECT telegram_id, ism_familya, hudud, telefon, avatar_file_id, lat, lon FROM users WHERE telegram_id = ?",
+        "SELECT telegram_id, ism_familya, telefon, avatar_file_id FROM users WHERE telegram_id = ?",
         (telegram_id,),
     )
     row = cur.fetchone()
@@ -321,102 +336,29 @@ def get_user_profile(telegram_id):
     return row
 
 
-def upsert_user_profile(telegram_id, ism_familya, hudud, telefon, avatar_file_id, lat, lon):
+def upsert_user_profile(telegram_id, ism_familya, telefon, avatar_file_id):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute(
-        """INSERT INTO users (telegram_id, ism_familya, hudud, telefon, avatar_file_id, lat, lon, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """INSERT INTO users (telegram_id, ism_familya, telefon, avatar_file_id, updated_at)
+           VALUES (?, ?, ?, ?, ?)
            ON CONFLICT(telegram_id) DO UPDATE SET
                ism_familya = excluded.ism_familya,
-               hudud = excluded.hudud,
                telefon = excluded.telefon,
                avatar_file_id = COALESCE(NULLIF(excluded.avatar_file_id, ''), avatar_file_id),
-               lat = excluded.lat,
-               lon = excluded.lon,
                updated_at = excluded.updated_at""",
-        (telegram_id, ism_familya, hudud, telefon, avatar_file_id, lat, lon, datetime.now().isoformat()),
+        (telegram_id, ism_familya, telefon, avatar_file_id, datetime.now().isoformat()),
     )
     conn.commit()
     conn.close()
 
 
-# ---------------------------------------------------------------------------
-# "QIZIQISH BILDIRISH"
-# ---------------------------------------------------------------------------
-
-def toggle_interest(listing_id, telegram_id):
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT id FROM interests WHERE listing_id = ? AND telegram_id = ?", (listing_id, telegram_id))
-    existing = cur.fetchone()
-    if existing:
-        cur.execute("DELETE FROM interests WHERE id = ?", (existing[0],))
-        is_interested = False
-    else:
-        cur.execute(
-            "INSERT INTO interests (listing_id, telegram_id, sana) VALUES (?, ?, ?)",
-            (listing_id, telegram_id, datetime.now().isoformat()),
-        )
-        is_interested = True
-    cur.execute("SELECT COUNT(*) FROM interests WHERE listing_id = ?", (listing_id,))
-    count = cur.fetchone()[0]
-    conn.commit()
-    conn.close()
-    return is_interested, count
-
-
-def get_interest_counts_map():
-    """Barcha e'lonlar uchun {listing_id: soni} lug'atini qaytaradi (bitta so'rovda, tezroq)"""
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT listing_id, COUNT(*) FROM interests GROUP BY listing_id")
-    result = {row[0]: row[1] for row in cur.fetchall()}
-    conn.close()
-    return result
-
-
-def get_my_interested_ids(telegram_id):
-    """Shu foydalanuvchi qiziqish bildirgan e'lon ID'lari to'plami"""
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT listing_id FROM interests WHERE telegram_id = ?", (telegram_id,))
-    result = {row[0] for row in cur.fetchall()}
-    conn.close()
-    return result
-
-
-def get_interested_users(listing_id, owner_telegram_id):
-    """Faqat e'lon egasi uchun — qiziqqan odamlarning ism va telefonlari"""
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    # Egasini tekshiramiz
-    cur.execute("SELECT telegram_id FROM listings WHERE id = ?", (listing_id,))
-    row = cur.fetchone()
-    if not row or row[0] != owner_telegram_id:
-        conn.close()
-        return None
-    cur.execute(
-        """SELECT u.ism_familya, u.telefon, i.sana FROM interests i
-           LEFT JOIN users u ON u.telegram_id = i.telegram_id
-           WHERE i.listing_id = ? ORDER BY i.id DESC""",
-        (listing_id,),
-    )
-    rows = cur.fetchall()
-    conn.close()
-    return rows
-
-
-def distance_km(lat1, lon1, lat2, lon2):
-    R = 6371
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (
-        math.sin(dlat / 2) ** 2
-        + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
-    )
-    c = 2 * math.asin(math.sqrt(a))
-    return R * c
+def hudud_label(level, viloyat, tuman):
+    if level == "uz":
+        return "O'zbekiston"
+    if level == "viloyat":
+        return viloyat
+    return f"{tuman}, {viloyat}" if tuman else viloyat
 
 
 # ---------------------------------------------------------------------------
@@ -431,215 +373,288 @@ def index():
     resp = flask_app.make_response(
         render_template("index.html", bot_username=BOT_USERNAME, mini_app_url=MINI_APP_URL)
     )
-    # Telegram Mini App sahifani keshlab qo'ymasligi uchun — har doim eng yangi versiyani olib turadi
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     resp.headers["Pragma"] = "no-cache"
     return resp
 
 
-@flask_app.route("/api/listings")
-def api_listings():
-    kategoriya = request.args.get("kategoriya", "all")
-    search_text = request.args.get("q", "").strip()
-    lat = request.args.get("lat", type=float)
-    lon = request.args.get("lon", type=float)
-
-    rows = search_listings(kategoriya, search_text if search_text else None)
-    interest_counts = get_interest_counts_map()
-
-    # Joriy foydalanuvchi kim ekanini bilish uchun (qaysi e'lonlarga qiziqish bildirganini bilish)
-    telegram_id, _ = resolve_user_id(request.args.get("init_data", ""), request.args.get("user_id", ""))
-    my_interested = get_my_interested_ids(telegram_id) if telegram_id else set()
-
-    result = []
-    for id_, kat, tavsif, narx, photo_file_id, item_lat, item_lon, telefon, hudud, views in rows:
-        dist = None
-        if lat is not None and lon is not None and item_lat is not None and item_lon is not None:
-            dist = round(distance_km(lat, lon, item_lat, item_lon), 1)
-        photo_urls = photo_ids_to_urls(photo_file_id)
-        result.append(
-            {
-                "id": id_,
-                "kategoriya": kat,
-                "tavsif": tavsif,
-                "narx": narx,
-                "photo_url": photo_urls[0] if photo_urls else "",
-                "photo_urls": photo_urls,
-                "telefon": telefon,
-                "distance_km": dist,
-                "lat": item_lat,
-                "lon": item_lon,
-                "hudud": hudud or "",
-                "views": views or 0,
-                "interest_count": interest_counts.get(id_, 0),
-                "is_interested": id_ in my_interested,
-            }
-        )
-
-    # Masofa borligicha yaqinlik bo'yicha, aks holda ID bo'yicha tartiblash
-    if lat is not None and lon is not None:
-        result.sort(key=lambda x: (x["distance_km"] is None, x["distance_km"]))
-    else:
-        result.sort(key=lambda x: -x["id"])
-
-    return jsonify(result)
-
-
-@flask_app.route("/photo/<file_id>")
-def photo(file_id):
-    # Telegram serveridan rasmning haqiqiy manzilini so'raymiz
+@flask_app.route("/media/<file_id>")
+def media(file_id):
+    """Rasm yoki videoni Telegram serveridan olib qaytaramiz"""
     try:
         resp = requests.get(
-            f"https://api.telegram.org/bot{BOT_TOKEN}/getFile", params={"file_id": file_id}, timeout=10
+            f"https://api.telegram.org/bot{BOT_TOKEN}/getFile",
+            params={"file_id": file_id},
+            timeout=10,
         )
         data = resp.json()
         file_path = data["result"]["file_path"]
         return redirect(f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}")
     except Exception as e:
-        logger.warning("Rasmni olishda xatolik: %s", e)
+        logger.warning("Mediani olishda xatolik: %s", e)
         return "", 404
 
 
-STATUS_LABELS = {
-    "pending": "⏳ Tekshirilmoqda",
-    "approved": "✅ Faol",
-    "rejected": "❌ Rad etilgan",
-    "sold": "💰 Sotildi",
-}
+@flask_app.route("/api/news")
+def api_news():
+    level = request.args.get("level", "uz")
+    viloyat = request.args.get("viloyat", "").strip()
+    tuman = request.args.get("tuman", "").strip()
+    search_text = request.args.get("q", "").strip()
 
+    rows = search_news(level, viloyat, tuman, search_text)
+    ccounts = comment_counts_map()
 
-def resolve_user_id(init_data: str, fallback_user_id: str):
-    """
-    Avval imzolangan initData orqali tekshirishga harakat qiladi (eng xavfsiz).
-    Agar Telegram klienti initData yubormasa (ba'zi eski versiyalarda uchraydi),
-    ehtiyot chorasi sifatida, faqat ID raqamiga ishonib davom etadi.
-    """
-    user = verify_telegram_init_data(init_data)
-    if user:
-        return user["id"], True  # (id, tasdiqlangan_imzo_bilanmi)
-
-    if fallback_user_id:
-        try:
-            uid = int(fallback_user_id)
-            logger.warning("Imzosiz (fallback) autentifikatsiya ishlatildi: user_id=%s", uid)
-            return uid, False
-        except (TypeError, ValueError):
-            pass
-
-    return None, False
-
-
-@flask_app.route("/api/my-listings")
-def api_my_listings():
-    telegram_id, _ = resolve_user_id(
-        request.args.get("init_data", ""), request.args.get("user_id", "")
-    )
-    if not telegram_id:
-        return jsonify({"error": "Tasdiqlanmagan so'rov. Mini App'ni Telegram orqali oching."}), 401
-
-    rows = get_my_listings(telegram_id)
-    interest_counts = get_interest_counts_map()
     result = []
-    for id_, kat, tavsif, narx, photo_file_id, status, sana, hudud, views in rows:
-        photo_urls = photo_ids_to_urls(photo_file_id)
+    for id_, sarlavha, matn, media, media_types, lvl, vil, tum, views, sana in rows:
+        media_list = media_to_list(media, media_types)
         result.append(
             {
                 "id": id_,
-                "kategoriya": kat,
-                "tavsif": tavsif,
-                "narx": narx,
-                "photo_url": photo_urls[0] if photo_urls else "",
-                "photo_urls": photo_urls,
-                "status": status,
-                "status_label": STATUS_LABELS.get(status, status),
-                "sana": sana,
-                "hudud": hudud or "",
+                "sarlavha": sarlavha,
+                "matn": matn,
+                "media": media_list,
+                "level": lvl,
+                "viloyat": vil,
+                "tuman": tum,
+                "hudud": hudud_label(lvl, vil, tum),
                 "views": views or 0,
-                "interest_count": interest_counts.get(id_, 0),
+                "comment_count": ccounts.get(id_, 0),
+                "sana": sana,
             }
         )
     return jsonify(result)
 
 
-@flask_app.route("/api/mark-sold", methods=["POST"])
-def api_mark_sold():
+@flask_app.route("/api/news/<int:news_id>")
+def api_news_detail(news_id):
+    row = get_news(news_id)
+    if not row or row[9] != "approved":  # status indeks 9
+        return jsonify({"error": "Topilmadi"}), 404
+    id_, telegram_id, sarlavha, matn, media, media_types, level, viloyat, tuman, status, views, sana = row
+    return jsonify(
+        {
+            "id": id_,
+            "sarlavha": sarlavha,
+            "matn": matn,
+            "media": media_to_list(media, media_types),
+            "level": level,
+            "viloyat": viloyat,
+            "tuman": tuman,
+            "hudud": hudud_label(level, viloyat, tuman),
+            "views": views or 0,
+            "sana": sana,
+        }
+    )
+
+
+@flask_app.route("/api/comments")
+def api_comments():
+    news_id = request.args.get("news_id", type=int)
+    if not news_id:
+        return jsonify({"error": "news_id kerak"}), 400
+    rows = get_comments(news_id)
+    return jsonify(
+        [{"id": r[0], "ism": r[1] or "Foydalanuvchi", "matn": r[2], "sana": r[3]} for r in rows]
+    )
+
+
+@flask_app.route("/api/add-comment", methods=["POST"])
+def api_add_comment():
     data = request.get_json(force=True)
-    telegram_id, _ = resolve_user_id(data.get("init_data", ""), data.get("user_id", ""))
+    telegram_id, tg_user = resolve_user_id(data.get("init_data", ""), data.get("user_id", ""))
     if not telegram_id:
         return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov"}), 401
 
-    listing_id = data.get("id")
-    if not listing_id:
-        return jsonify({"success": False, "error": "id kerak"}), 400
-    success = mark_as_sold(listing_id, telegram_id)
-    return jsonify({"success": success})
+    news_id = data.get("news_id")
+    matn = (data.get("matn") or "").strip()
+    if not news_id or not matn:
+        return jsonify({"success": False, "error": "Matn bo'sh"}), 400
 
+    # Ism: profildan, yo'qsa Telegram nomidan
+    ism = ""
+    prof = get_user_profile(telegram_id)
+    if prof and prof[1]:
+        ism = prof[1]
+    elif tg_user:
+        ism = (tg_user.get("first_name") or "") + " " + (tg_user.get("last_name") or "")
+        ism = ism.strip()
 
-@flask_app.route("/api/delete-listing", methods=["POST"])
-def api_delete_listing():
-    data = request.get_json(force=True)
-    telegram_id, _ = resolve_user_id(data.get("init_data", ""), data.get("user_id", ""))
-    if not telegram_id:
-        return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov"}), 401
-
-    listing_id = data.get("id")
-    if not listing_id:
-        return jsonify({"success": False, "error": "id kerak"}), 400
-    success = delete_own_listing(listing_id, telegram_id)
-    return jsonify({"success": success})
-
-
-@flask_app.route("/api/update-listing", methods=["POST"])
-def api_update_listing():
-    data = request.get_json(force=True)
-    telegram_id, _ = resolve_user_id(data.get("init_data", ""), data.get("user_id", ""))
-    if not telegram_id:
-        return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov"}), 401
-
-    listing_id = data.get("id")
-    tavsif = (data.get("tavsif") or "").strip()
-    narx = (data.get("narx") or "").strip()
-    telefon = (data.get("telefon") or "").strip()
-    hudud = (data.get("hudud") or "").strip()
-
-    if not listing_id or not all([tavsif, narx, telefon]):
-        return jsonify({"success": False, "error": "Barcha maydonlarni to'ldiring"}), 400
-
-    success = update_own_listing(listing_id, telegram_id, tavsif, narx, telefon, hudud)
-    return jsonify({"success": success})
-
-
-@flask_app.route("/api/view-listing", methods=["POST"])
-def api_view_listing():
-    # Ko'rishlar sonini oshirish uchun autentifikatsiya shart emas — ochiq amal
-    data = request.get_json(force=True)
-    listing_id = data.get("id")
-    if not listing_id:
-        return jsonify({"success": False}), 400
-    increment_views(listing_id)
+    add_comment(news_id, telegram_id, ism, matn)
     return jsonify({"success": True})
+
+
+@flask_app.route("/api/view-news", methods=["POST"])
+def api_view_news():
+    data = request.get_json(force=True)
+    news_id = data.get("id")
+    if news_id:
+        increment_views(news_id)
+    return jsonify({"success": True})
+
+
+@flask_app.route("/api/create-news", methods=["POST"])
+def api_create_news():
+    try:
+        telegram_id, _ = resolve_user_id(
+            request.form.get("init_data", ""), request.form.get("user_id", "")
+        )
+        if not telegram_id:
+            return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov"}), 401
+
+        sarlavha = request.form.get("sarlavha", "").strip()
+        matn = request.form.get("matn", "").strip()
+        level = request.form.get("level", "uz")
+        viloyat = request.form.get("viloyat", "").strip()
+        tuman = request.form.get("tuman", "").strip()
+        files = request.files.getlist("media")[:3]  # max 3 ta
+
+        if level == "uz":
+            viloyat, tuman = "", ""
+        elif level == "viloyat":
+            if not viloyat:
+                return jsonify({"success": False, "error": "Viloyat tanlanmagan"}), 400
+            tuman = ""
+        elif level == "tuman":
+            if not viloyat or not tuman:
+                return jsonify({"success": False, "error": "Viloyat va tuman tanlanmagan"}), 400
+
+        if not sarlavha or not matn or not files:
+            return jsonify({"success": False, "error": "Sarlavha, matn va kamida 1 ta rasm/video kerak"}), 400
+
+        news_id = add_news(telegram_id, sarlavha, matn, level, viloyat, tuman)
+
+        hudud = hudud_label(level, viloyat, tuman)
+        admin_caption = (
+            f"🆕 Yangi yangilik (ID: {news_id}):\n\n"
+            f"📍 {hudud}\n📰 {sarlavha}\n\n{matn[:300]}"
+        )
+        admin_keyboard = {
+            "inline_keyboard": [
+                [
+                    {"text": "✅ Tasdiqlash", "callback_data": f"admin:approve:{news_id}"},
+                    {"text": "❌ Rad etish", "callback_data": f"admin:reject:{news_id}"},
+                ]
+            ]
+        }
+
+        file_ids, media_types = [], []
+        target_chat = ADMIN_ID if ADMIN_ID else telegram_id
+
+        for i, f in enumerate(files):
+            is_video = f.mimetype.startswith("video/")
+            method = "sendVideo" if is_video else "sendPhoto"
+            data = {"chat_id": target_chat}
+            if i == 0:
+                data["caption"] = admin_caption
+                data["reply_markup"] = json.dumps(admin_keyboard)
+            try:
+                resp = requests.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/{method}",
+                    data=data,
+                    files={"video" if is_video else "photo": (f.filename, f.stream, f.mimetype)},
+                    timeout=30,
+                )
+                result = resp.json()
+                if result.get("ok"):
+                    key = "video" if is_video else "photo"
+                    file_ids.append(result["result"][key][-1]["file_id"])
+                    media_types.append("video" if is_video else "photo")
+            except Exception as e:
+                logger.warning("Media %d yuborishda xatolik: %s", i, e)
+
+        if file_ids:
+            set_news_media(news_id, file_ids, media_types)
+
+        try:
+            requests.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                data={
+                    "chat_id": telegram_id,
+                    "text": "Rahmat! 🙌 Yangiligingiz yuborildi — admin tez orada ko'rib chiqadi.",
+                },
+                timeout=10,
+            )
+        except Exception as e:
+            logger.warning("Xabar yuborishda xatolik: %s", e)
+
+        return jsonify({"success": True, "id": news_id})
+
+    except Exception as e:
+        logger.warning("Yangilik yaratishda xatolik: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@flask_app.route("/api/my-news")
+def api_my_news():
+    telegram_id, _ = resolve_user_id(request.args.get("init_data", ""), request.args.get("user_id", ""))
+    if not telegram_id:
+        return jsonify({"error": "Tasdiqlanmagan so'rov"}), 401
+    rows = get_my_news(telegram_id)
+    result = []
+    for id_, sarlavha, matn, media, media_types, level, viloyat, tuman, status, views, sana in rows:
+        result.append(
+            {
+                "id": id_,
+                "sarlavha": sarlavha,
+                "matn": matn,
+                "media": media_to_list(media, media_types),
+                "hudud": hudud_label(level, viloyat, tuman),
+                "status": status,
+                "status_label": STATUS_LABELS.get(status, status),
+                "views": views or 0,
+                "sana": sana,
+            }
+        )
+    return jsonify(result)
+
+
+@flask_app.route("/api/update-news", methods=["POST"])
+def api_update_news():
+    data = request.get_json(force=True)
+    telegram_id, _ = resolve_user_id(data.get("init_data", ""), data.get("user_id", ""))
+    if not telegram_id:
+        return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov"}), 401
+    news_id = data.get("id")
+    sarlavha = (data.get("sarlavha") or "").strip()
+    matn = (data.get("matn") or "").strip()
+    if not news_id or not sarlavha or not matn:
+        return jsonify({"success": False, "error": "Maydonlarni to'ldiring"}), 400
+    ok = update_own_news(news_id, telegram_id, sarlavha, matn)
+    return jsonify({"success": ok})
+
+
+@flask_app.route("/api/delete-news", methods=["POST"])
+def api_delete_news():
+    data = request.get_json(force=True)
+    telegram_id, _ = resolve_user_id(data.get("init_data", ""), data.get("user_id", ""))
+    if not telegram_id:
+        return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov"}), 401
+    news_id = data.get("id")
+    if not news_id:
+        return jsonify({"success": False, "error": "id kerak"}), 400
+    ok = delete_own_news(news_id, telegram_id)
+    return jsonify({"success": ok})
 
 
 @flask_app.route("/api/get-profile")
 def api_get_profile():
-    telegram_id, _ = resolve_user_id(request.args.get("init_data", ""), request.args.get("user_id", ""))
+    telegram_id, tg_user = resolve_user_id(request.args.get("init_data", ""), request.args.get("user_id", ""))
     if not telegram_id:
         return jsonify({"error": "Tasdiqlanmagan so'rov"}), 401
-
     row = get_user_profile(telegram_id)
+    tg_name = ""
+    if tg_user:
+        tg_name = ((tg_user.get("first_name") or "") + " " + (tg_user.get("last_name") or "")).strip()
     if not row:
-        return jsonify({"exists": False})
-
-    _, ism_familya, hudud, telefon, avatar_file_id, lat, lon = row
+        return jsonify({"exists": False, "tg_name": tg_name})
     return jsonify(
         {
             "exists": True,
-            "ism_familya": ism_familya or "",
-            "hudud": hudud or "",
-            "telefon": telefon or "",
-            "avatar_url": f"/photo/{avatar_file_id}" if avatar_file_id else "",
-            "lat": lat,
-            "lon": lon,
+            "ism_familya": row[1] or tg_name,
+            "telefon": row[2] or "",
+            "avatar_url": f"/media/{row[3]}" if row[3] else "",
+            "tg_name": tg_name,
         }
     )
 
@@ -649,17 +664,11 @@ def api_update_profile():
     telegram_id, _ = resolve_user_id(request.form.get("init_data", ""), request.form.get("user_id", ""))
     if not telegram_id:
         return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov"}), 401
-
     ism_familya = (request.form.get("ism_familya") or "").strip()
-    hudud = (request.form.get("hudud") or "").strip()
     telefon = (request.form.get("telefon") or "").strip()
-    lat = request.form.get("lat", type=float)
-    lon = request.form.get("lon", type=float)
     avatar = request.files.get("avatar")
-
     if not ism_familya:
-        return jsonify({"success": False, "error": "Ism-familya kiritilishi shart"}), 400
-
+        return jsonify({"success": False, "error": "Ism kiritilishi shart"}), 400
     avatar_file_id = ""
     if avatar:
         try:
@@ -674,195 +683,98 @@ def api_update_profile():
                 avatar_file_id = result["result"]["photo"][-1]["file_id"]
         except Exception as e:
             logger.warning("Avatar yuborishda xatolik: %s", e)
-
-    upsert_user_profile(telegram_id, ism_familya, hudud, telefon, avatar_file_id, lat, lon)
+    upsert_user_profile(telegram_id, ism_familya, telefon, avatar_file_id)
     return jsonify({"success": True})
 
 
-@flask_app.route("/api/express-interest", methods=["POST"])
-def api_express_interest():
-    data = request.get_json(force=True)
-    telegram_id, _ = resolve_user_id(data.get("init_data", ""), data.get("user_id", ""))
-    if not telegram_id:
-        return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov"}), 401
-
-    listing_id = data.get("id")
-    if not listing_id:
-        return jsonify({"success": False, "error": "id kerak"}), 400
-
-    is_interested, count = toggle_interest(listing_id, telegram_id)
-    return jsonify({"success": True, "is_interested": is_interested, "count": count})
-
-
-@flask_app.route("/api/listing-interests")
-def api_listing_interests():
-    telegram_id, _ = resolve_user_id(request.args.get("init_data", ""), request.args.get("user_id", ""))
-    if not telegram_id:
-        return jsonify({"error": "Tasdiqlanmagan so'rov"}), 401
-
-    listing_id = request.args.get("id", type=int)
-    if not listing_id:
-        return jsonify({"error": "id kerak"}), 400
-
-    rows = get_interested_users(listing_id, telegram_id)
-    if rows is None:
-        return jsonify({"error": "Bu sizning e'loningiz emas"}), 403
-
-    result = [{"ism_familya": r[0] or "Ism kiritilmagan", "telefon": r[1] or "", "sana": r[2]} for r in rows]
-    return jsonify(result)
-
-
-@flask_app.route("/api/create-listing", methods=["POST"])
-def api_create_listing():
-    try:
-        telegram_id, _ = resolve_user_id(
-            request.form.get("init_data", ""), request.form.get("user_id", "")
-        )
-        if not telegram_id:
-            return jsonify({"success": False, "error": "Tasdiqlanmagan so'rov. Mini App'ni Telegram orqali oching."}), 401
-
-        kategoriya = request.form.get("kategoriya", "").strip()
-        tavsif = request.form.get("tavsif", "").strip()
-        narx = request.form.get("narx", "").strip()
-        telefon = request.form.get("telefon", "").strip()
-        hudud = request.form.get("hudud", "").strip()
-        lat = request.form.get("lat", type=float)
-        lon = request.form.get("lon", type=float)
-        photos = request.files.getlist("photos")[:3]  # eng ko'pi bilan 3 ta rasm
-
-        if not all([kategoriya, tavsif, narx, telefon]) or not photos:
-            return jsonify({"success": False, "error": "Barcha maydonlarni to'ldiring"}), 400
-
-        # Avval bo'sh rasm bilan yozuvni yaratamiz (id olish uchun)
-        listing_id = add_listing(telegram_id, kategoriya, tavsif, narx, "", lat, lon, telefon, hudud)
-
-        admin_caption = (
-            f"🆕 Yangi e'lon (Mini App orqali, ID: {listing_id}):\n\n"
-            f"Turi: {kategoriya}\nHudud: {hudud}\nTavsif: {tavsif}\nNarx: {narx}\nTelefon: {telefon}"
-        )
-        admin_keyboard = {
-            "inline_keyboard": [
-                [
-                    {"text": "✅ Tasdiqlash", "callback_data": f"admin:approve:{listing_id}"},
-                    {"text": "❌ Rad etish", "callback_data": f"admin:reject:{listing_id}"},
-                ]
-            ]
-        }
-
-        file_ids = []
-        target_chat = ADMIN_ID if ADMIN_ID else telegram_id
-
-        for i, photo in enumerate(photos):
-            try:
-                data = {"chat_id": target_chat}
-                if i == 0:
-                    # Faqat birinchi rasmga tavsif va tasdiqlash tugmalarini qo'shamiz
-                    data["caption"] = admin_caption
-                    data["reply_markup"] = json.dumps(admin_keyboard)
-                resp = requests.post(
-                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
-                    data=data,
-                    files={"photo": (photo.filename, photo.stream, photo.mimetype)},
-                    timeout=20,
-                )
-                result = resp.json()
-                if result.get("ok"):
-                    file_ids.append(result["result"]["photo"][-1]["file_id"])
-            except Exception as e:
-                logger.warning("Rasm %d ni yuborishda xatolik: %s", i, e)
-
-        if file_ids:
-            set_listing_photos(listing_id, "|".join(file_ids))
-
-        # Foydalanuvchiga tasdiq xabari
-        try:
-            requests.post(
-                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                data={
-                    "chat_id": telegram_id,
-                    "text": "Rahmat! 🙌 E'loningiz admin tomonidan tez orada ko'rib chiqiladi.",
-                },
-                timeout=10,
-            )
-        except Exception as e:
-            logger.warning("Foydalanuvchiga xabar yuborishda xatolik: %s", e)
-
-        return jsonify({"success": True, "id": listing_id})
-
-    except Exception as e:
-        logger.warning("E'lon yaratishda xatolik: %s", e)
-        return jsonify({"success": False, "error": str(e)}), 500
-
-
 # ---------------------------------------------------------------------------
-# TELEGRAM BOT — YORDAMCHI
+# TELEGRAM BOT
 # ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# /start — ILOVANI OCHISH TUGMASI
-# ---------------------------------------------------------------------------
-
-def get_mini_app_url():
+def get_mini_app_url(extra=""):
     if not MINI_APP_URL:
         return None
-    # Har safar yangi "vaqt belgisi" qo'shiladi — shunda Telegram sahifani
-    # hech qachon eski (keshlangan) holatda ko'rsatmaydi, har doim eng yangisini oladi
-    return f"{MINI_APP_URL}?v={int(time.time())}"
+    return f"{MINI_APP_URL}{extra}&v={int(time.time())}" if extra else f"{MINI_APP_URL}?v={int(time.time())}"
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     fresh_url = get_mini_app_url()
-    if fresh_url:
-        keyboard = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("🐄 Ilovaga kirish", web_app=WebAppInfo(url=fresh_url))]]
-        )
-    else:
-        keyboard = None
-
-    text = (
-        "Assalomu alaykum! 👋🐄🐑🐐\n\n"
-        "Chorva Bozorga xush kelibsiz — mol, qo'y, echki, parranda va "
-        "yem-hashak sotish yoki topish endi bir necha tugma ichida!\n\n"
-        "Boshlash uchun pastdagi tugmani bosing 👇"
+    keyboard = (
+        InlineKeyboardMarkup([[InlineKeyboardButton("📰 Ilovaga kirish", web_app=WebAppInfo(url=fresh_url))]])
+        if fresh_url else None
     )
-    if update.message:
-        await update.message.reply_text(text, reply_markup=keyboard)
-    else:
-        await update.callback_query.message.reply_text(text, reply_markup=keyboard)
+    text = (
+        "Assalomu alaykum! 👋\n\n"
+        "📰 *Hudud Yangiliklari* — mahalliy, viloyat va respublika "
+        "yangiliklari endi bitta ilovada!\n\n"
+        "Hududingizni tanlang va eng yaqin yangiliklardan birinchi bo'lib xabardor bo'ling. "
+        "To'liq matn, rasmlar va kommentariyalar ilovada 👇"
+    )
+    msg = update.message or update.callback_query.message
+    await msg.reply_text(text, reply_markup=keyboard, parse_mode="Markdown")
 
 
 async def admin_decision(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    _, action, listing_id_str = query.data.split(":")
-    listing_id = int(listing_id_str)
-    row = get_listing(listing_id)
+    _, action, news_id_str = query.data.split(":")
+    news_id = int(news_id_str)
+    row = get_news(news_id)
 
     if not row:
-        await query.message.reply_text("E'lon topilmadi.")
+        await query.message.reply_text("Yangilik topilmadi.")
         return
 
-    telegram_id = row[1]
-    tavsif = row[3]
+    author_id = row[1]
+    sarlavha = row[2]
+    matn = row[3]
+    level, viloyat, tuman = row[6], row[7], row[8]
+    hudud = hudud_label(level, viloyat, tuman)
 
     if action == "approve":
-        set_listing_status(listing_id, "approved")
-        await query.message.reply_text(f"✅ Tasdiqlandi: {tavsif}")
+        set_news_status(news_id, "approved")
+        await query.message.reply_text(f"✅ Tasdiqlandi: {sarlavha}")
+
+        # Kanalga (yoki adminga) qisqa matn + "Batafsil" tugmasi
+        short_text = matn[:250] + ("…" if len(matn) > 250 else "")
+        detail_url = get_mini_app_url(extra=f"?news_id={news_id}")
+        keyboard = None
+        if detail_url:
+            keyboard = InlineKeyboardMarkup(
+                [[InlineKeyboardButton("📰 Batafsil — ilovada o'qish", web_app=WebAppInfo(url=detail_url))]]
+            )
+        post_text = f"📍 *{hudud}*\n\n📰 *{sarlavha}*\n\n{short_text}"
+        target = CHANNEL_ID if CHANNEL_ID else ADMIN_ID
+        if target:
+            try:
+                await context.bot.send_message(
+                    chat_id=int(target), text=post_text,
+                    reply_markup=keyboard, parse_mode="Markdown",
+                )
+            except Exception as e:
+                logger.warning("Kanalga yuborishda xatolik: %s", e)
+
         try:
-            await context.bot.send_message(chat_id=telegram_id, text="🎉 Ajoyib! E'loningiz tasdiqlandi va endi katalogda ko'rinadi.")
+            await context.bot.send_message(
+                chat_id=author_id,
+                text="🎉 Ajoyib! Yangiligingiz tasdiqlandi va e'lon qilindi.",
+            )
         except Exception as e:
             logger.warning("Xabar yuborishda xatolik: %s", e)
     else:
-        set_listing_status(listing_id, "rejected")
-        await query.message.reply_text(f"❌ Rad etildi: {tavsif}")
+        set_news_status(news_id, "rejected")
+        await query.message.reply_text(f"❌ Rad etildi: {sarlavha}")
         try:
-            await context.bot.send_message(chat_id=telegram_id, text="Afsuski, e'loningiz hozircha tasdiqlanmadi. Savol bo'lsa, admin bilan bog'laning.")
+            await context.bot.send_message(
+                chat_id=author_id,
+                text="Afsuski, yangiligingiz hozircha tasdiqlanmadi.",
+            )
         except Exception as e:
             logger.warning("Xabar yuborishda xatolik: %s", e)
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    logger.error("Xatolik yuz berdi: %s", context.error)
+    logger.error("Xatolik: %s", context.error)
 
 
 # ---------------------------------------------------------------------------
@@ -870,24 +782,20 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 # ---------------------------------------------------------------------------
 
 def run_flask():
-    # threaded=True — bir vaqtning o'zida bir nechta odam kirsa ham, server
-    # ularni birma-bir emas, parallel ishlaydi (tezlik sezilarli oshadi)
     flask_app.run(host="0.0.0.0", port=PORT, threaded=True)
 
 
 async def post_init(application: Application) -> None:
-    """Bot ishga tushganda, doimiy 'Menu Button'ni sozlaymiz — shunda foydalanuvchi
-    /start yozmasdan, har doim pastdagi tugma orqali ilovani ocha oladi."""
     if MINI_APP_URL:
         try:
             from telegram import MenuButtonWebApp
 
             await application.bot.set_chat_menu_button(
                 menu_button=MenuButtonWebApp(
-                    text="🐄 Ilovaga kirish", web_app=WebAppInfo(url=MINI_APP_URL)
+                    text="📰 Ilovaga kirish", web_app=WebAppInfo(url=MINI_APP_URL)
                 )
             )
-            logger.info("Doimiy Menu Button muvaffaqiyatli sozlandi")
+            logger.info("Menu Button sozlandi")
         except Exception as e:
             logger.warning("Menu Button sozlashda xatolik: %s", e)
 
@@ -899,18 +807,16 @@ def main():
         print("XATOLIK: BOT_TOKEN o'rnatilmagan!")
         return
 
-    # Flask serverni fon rejimida (alohida thread'da) ishga tushiramiz
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     print(f"Mini App serveri {PORT}-portda ishga tushdi...")
 
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(admin_decision, pattern="^admin:"))
     app.add_error_handler(error_handler)
 
-    print("Chorva Bozor bot ishga tushdi...")
+    print("Hudud Yangiliklari boti ishga tushdi...")
     app.run_polling()
 
 
